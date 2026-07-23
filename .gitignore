@@ -1,0 +1,13 @@
+# Reverse-engineering artifacts (decompiles, APKs, analysis notes) - not part of the product
+/reveng/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Local configuration (incl. HOERMOLES_CONF_DIR for development)
+.env
+.env.*
+.hoermoles/
