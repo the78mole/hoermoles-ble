@@ -55,13 +55,13 @@ jobs:
       version_tag: ${{ steps.semver.outputs.version_tag }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
       with:
         fetch-depth: 0
 
     - name: Calculate semantic version
       id: semver
-      uses: paulhatch/semantic-version@v5.4.0
+      uses: paulhatch/semantic-version@v6.0.2
       with:
         tag_prefix: "python/v"
         major_pattern: "/(feat|fix|refactor)!:/"
@@ -94,7 +94,7 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
 
     - name: Create Release
       env:
@@ -144,10 +144,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7.0.0
       with:
         python-version: "3.11"
 
@@ -196,7 +196,7 @@ jobs:
         EOF
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.1
       with:
         name: hoermoles-ble-dist
         path: python/packages/hoermoles-ble/dist/
@@ -215,7 +215,7 @@ jobs:
 
     steps:
     - name: Download distributions
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8.0.1
       with:
         name: hoermoles-ble-dist
         path: dist/
@@ -248,10 +248,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7.0.0
       with:
         python-version: "3.11"
 
@@ -296,7 +296,7 @@ jobs:
         EOF
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.1
       with:
         name: hoermoles-ble-cli-dist
         path: python/packages/hoermoles-ble-cli/dist/
@@ -315,7 +315,7 @@ jobs:
 
     steps:
     - name: Download distributions
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8.0.1
       with:
         name: hoermoles-ble-cli-dist
         path: dist/

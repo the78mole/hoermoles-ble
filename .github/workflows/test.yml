@@ -16,7 +16,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
 
     - name: Install uv
       uses: astral-sh/setup-uv@v9.0.0
@@ -63,7 +63,7 @@ jobs:
 
     - name: Update coverage badge Gist
       if: matrix.python-version == '3.12' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: schneegans/dynamic-badges-action@v1.7.0
+      uses: schneegans/dynamic-badges-action@v1.9.0
       with:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: 42b377cb18c21fa8d1cfee3fc3bc3605  # TODO: replace with the target Gist's ID - see setup notes above
