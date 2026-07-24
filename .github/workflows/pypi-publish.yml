@@ -1,0 +1,144 @@
+name: Publish hoermoles-ble to PyPI
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: true
+        type: string
+      version_tag:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        type: string
+      environment:
+        description: 'GitHub environment to deploy from (must match the PyPI Trusted Publisher config)'
+        required: false
+        type: string
+        default: 'pypi'
+      package-directory:
+        description: 'Path (relative to repo root) of the package to build and publish'
+        required: false
+        type: string
+        default: 'python/packages/hoermoles-ble'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+      version_tag:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        type: string
+        default: ''
+      environment:
+        description: 'GitHub environment to deploy from (must match the PyPI Trusted Publisher config)'
+        required: false
+        type: string
+        default: 'pypi'
+      package-directory:
+        description: 'Path (relative to repo root) of the package to build and publish'
+        required: false
+        type: string
+        default: 'python/packages/hoermoles-ble'
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Set package version
+      # hoermoles-ble/hoermoles-ble-cli use a plain static `version = "..."` in
+      # [project] (no hatch-vcs/dynamic versioning) - `hatch version <x>` refuses
+      # to touch that ("Cannot set version when it is statically defined by the
+      # project.version field"), so this rewrites the line directly instead.
+      working-directory: ${{ inputs.package-directory }}
+      run: |
+        python3 -c "
+        import re, pathlib
+        path = pathlib.Path('pyproject.toml')
+        text = path.read_text()
+        new_text, count = re.subn(r'(?m)^version = \"[^\"]*\"', 'version = \"${{ inputs.version }}\"', text, count=1)
+        assert count == 1, 'expected exactly one version = \"...\" line in [project]'
+        path.write_text(new_text)
+        "
+        grep '^version = ' pyproject.toml
+
+    - name: Build package
+      working-directory: ${{ inputs.package-directory }}
+      run: python -m build
+
+    - name: Check distribution
+      working-directory: ${{ inputs.package-directory }}
+      run: |
+        twine check dist/*
+
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🔨 Package Build
+
+        **Package:** \`${{ inputs.package-directory }}\`
+        **Version:** \`${{ inputs.version }}\`
+
+        Folgende Distributions wurden erstellt:
+
+        \`\`\`
+        $(ls -lh dist/)
+        \`\`\`
+        EOF
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-package-distributions
+        path: ${{ inputs.package-directory }}/dist/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://pypi.org/p/hoermoles-ble
+
+    permissions:
+      id-token: write  # required for PyPI Trusted Publishing (OIDC) - no API token/secret needed
+
+    steps:
+    - name: Download distributions
+      uses: actions/download-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+
+    - name: Add PyPI Summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🚀 PyPI Veröffentlichung
+
+        **Package:** [hoermoles-ble](https://pypi.org/project/hoermoles-ble/)
+        **Version:** \`${{ inputs.version }}\`
+
+        ### Installation
+
+        \`\`\`bash
+        pip install hoermoles-ble==${{ inputs.version }}
+        \`\`\`
+        EOF
