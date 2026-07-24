@@ -1,0 +1,89 @@
+name: SPA Tests
+
+# The SPA half of the monorepo. Independent of test.yml (the Python one) - they
+# share nothing except the coverage-badge Gist, where each writes its own file.
+#
+# The `shared/` path is a trigger here on purpose: shared/test-vectors.json is
+# generated from the Python implementation and the TypeScript suite asserts
+# against it, so a change there must re-run these tests.
+
+on:
+  pull_request:
+    paths:
+      - 'spa/**'
+      - 'shared/**'
+      - '.github/workflows/spa-test.yml'
+  workflow_call:  # so spa-deploy.yml can gate the deployment on tests passing
+
+jobs:
+  test:
+    name: vitest + typecheck + lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: spa
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+
+    - uses: actions/setup-node@v7.0.0
+      with:
+        # 24, not 22, and the two workflows must stay in step: package-lock.json
+        # is written by npm 11 (bundled with Node 24), which correctly omits
+        # Vite's *optional* peer dependencies. Node 22 still ships npm 10, which
+        # wants to install them and then fails `npm ci` with
+        # "Missing: yaml@2.9.0 from lock file". Generating and consuming the
+        # lockfile with the same npm major is the fix.
+        node-version: 24
+        cache: npm
+        cache-dependency-path: spa/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint
+      run: npx eslint .
+
+    - name: Check formatting
+      run: npx prettier --check .
+
+    - name: Typecheck
+      run: npm run typecheck
+
+    - name: Run tests with coverage
+      run: npx vitest run --coverage
+
+    - name: Verify the production build succeeds
+      run: npm run build
+
+    - name: Coverage summary
+      if: always()
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<'EOF'
+        ## 🧪 SPA test coverage
+        ```
+        EOF
+        cat coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no coverage report)" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    # Same Gist + shields.io approach as the Python side, under its own
+    # filename so the two badges do not overwrite each other. Only on a real
+    # push to main (i.e. via spa-deploy.yml's workflow_call), never from a PR.
+    - name: Extract coverage percentage
+      id: coverage
+      run: |
+        percentage=$(jq -r '.total.statements.pct | floor' coverage/coverage-summary.json)
+        echo "percentage=$percentage" >> "$GITHUB_OUTPUT"
+
+    - name: Update coverage badge Gist
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: schneegans/dynamic-badges-action@v1.9.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 42b377cb18c21fa8d1cfee3fc3bc3605
+        filename: hoermoles-spa-coverage.json
+        label: SPA Coverage
+        message: ${{ steps.coverage.outputs.percentage }}%
+        valColorRange: ${{ steps.coverage.outputs.percentage }}
+        minColorRange: 50
+        maxColorRange: 100

@@ -1,0 +1,167 @@
+name: Release and Deploy SPA
+
+# Deploys the web app to GitHub Pages and cuts a release for it.
+#
+# Tags are namespaced "spa/v..." - this is a monorepo, and the Python packages
+# release independently under "python/v..." (see pypi-publish.yml). Each
+# component computes its own semantic version against its own tag namespace and
+# triggers only on its own paths.
+#
+# Unlike pypi-publish.yml this file MAY call a reusable workflow: the
+# reusable-workflow/OIDC trap documented there is specific to PyPI's Trusted
+# Publishing. GitHub Pages deployment uses GitHub's own Pages permission model
+# (`pages: write` + `id-token: write` on this job), which is unaffected.
+#
+# One-time manual setup: repository Settings -> Pages -> Source = "GitHub Actions".
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'spa/**'
+      - 'shared/**'
+      - '.github/workflows/spa-test.yml'
+      - '.github/workflows/spa-deploy.yml'
+  workflow_dispatch:
+
+# Never let two deployments race; let a newer commit supersede an in-flight one
+# rather than queueing an already-stale build behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Run tests (gate for tagging/deployment)
+    uses: ./.github/workflows/spa-test.yml
+    secrets: inherit  # for the coverage-badge Gist step
+
+  version:
+    name: Calculate Version
+    needs: [test]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      version_tag: ${{ steps.semver.outputs.version_tag }}
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        fetch-depth: 0
+
+    - name: Calculate semantic version
+      id: semver
+      uses: paulhatch/semantic-version@v6.0.2
+      with:
+        tag_prefix: "spa/v"
+        major_pattern: "/(feat|fix|refactor)!:/"
+        minor_pattern: "/^feat:/"
+        version_format: "${major}.${minor}.${patch}"
+        bump_each_commit: true
+        search_commit_body: true
+
+    - name: Show version
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 📦 SPA version
+
+        **Version:** \`${{ steps.semver.outputs.version }}\`
+        **Git tag:** \`${{ steps.semver.outputs.version_tag }}\`
+        EOF
+
+  build:
+    name: Build the site
+    needs: [version]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: spa
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+
+    - uses: actions/setup-node@v7.0.0
+      with:
+        # Keep in step with spa-test.yml - see the comment there on why 22 breaks
+        # `npm ci` against a lockfile written by npm 11.
+        node-version: 24
+        cache: npm
+        cache-dependency-path: spa/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Stamp the version
+      # Purely informational - it ends up in the built bundle so a deployed app
+      # can be traced back to a commit.
+      run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version --workspaces --include-workspace-root || true
+
+    - name: Build
+      # base must match the Pages project-site path; vite.config.ts defaults to
+      # it, this makes the dependency explicit rather than implicit.
+      env:
+        HOERMOLES_BASE: /${{ github.event.repository.name }}/
+      run: npm run build
+
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v5.0.0
+      with:
+        path: spa/packages/webapp/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: [version, build]
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    permissions:
+      pages: write
+      id-token: write
+
+    steps:
+    - name: Deploy
+      id: deployment
+      uses: actions/deploy-pages@v5.0.0
+
+    - name: Summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🚀 Deployed
+
+        **Version:** \`${{ needs.version.outputs.version }}\`
+        **URL:** ${{ steps.deployment.outputs.page_url }}
+        EOF
+
+  create-release:
+    name: Create GitHub Release
+    needs: [version, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+
+    - name: Create Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create ${{ needs.version.outputs.version_tag }} \
+          --title "Hoermoles web app ${{ needs.version.outputs.version }}" \
+          --notes "## Hoermoles web app ${{ needs.version.outputs.version }}
+
+        Control Hörmann BlueSecur drives from the browser over Web Bluetooth -
+        no vendor app, no cloud. Installable as a PWA and fully offline-capable
+        after the first load.
+
+        **Live:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+        Requires Chrome or Edge on Android, Windows, macOS or ChromeOS. Safari
+        and Firefox do not implement Web Bluetooth, so iOS is not supported.
+
+        Credentials registered with the \`hoermoles-ble\` CLI can be imported via
+        \`hoermoles-ble export\`; drives can also be registered directly in the app."

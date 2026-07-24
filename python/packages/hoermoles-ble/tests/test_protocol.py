@@ -10,7 +10,6 @@ import struct
 import pytest
 from hoermoles_ble import protocol as p
 
-
 # --- QR code prefix parsing --------------------------------------------------
 
 

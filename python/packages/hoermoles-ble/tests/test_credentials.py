@@ -1,5 +1,4 @@
 import pytest
-
 from hoermoles_ble.credentials import Credentials, default_credentials_path, list_saved_credential_paths
 
 

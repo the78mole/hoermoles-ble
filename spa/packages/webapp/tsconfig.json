@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // "node" is for vite.config.ts (process.env) only - app code under src/
+    // runs in a browser and must not reach for node: modules.
+    "types": ["web-bluetooth", "node", "vite/client", "vite-plugin-pwa/client"],
+    "paths": {
+      "hoermoles-ble-js": ["../hoermoles-ble-js/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts"]
+}

@@ -3,11 +3,10 @@ import base64
 import os
 import struct
 
+import hoermoles_ble.client as client_module
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-
-import hoermoles_ble.client as client_module
 from hoermoles_ble import protocol as p
 from hoermoles_ble.client import HoermannClient, PropertiesRejected, RegistrationTimeout
 from hoermoles_ble.credentials import Credentials

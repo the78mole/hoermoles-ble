@@ -27,7 +27,12 @@ on:
       - main
     paths:
       - 'python/**'
-      - '.github/workflows/*.yml'
+      - 'shared/**'  # generated from the Python implementation - see hoermoles_ble.interop
+      # Only this workflow and the test workflow it calls. A wildcard here would
+      # cut a Python release on every edit to an unrelated workflow file (e.g.
+      # the SPA ones), which is exactly what happened before this was narrowed.
+      - '.github/workflows/pypi-publish.yml'
+      - '.github/workflows/test.yml'
   workflow_dispatch:
     inputs:
       publish_target:

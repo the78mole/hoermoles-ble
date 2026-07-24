@@ -1,7 +1,7 @@
 import base64
+import binascii
 
 import pytest
-
 from hoermoles_ble.qr_store import default_qr_store_path, known_qr_serial_map, load_known_qrs, save_qr
 
 # 31-digit prefix format verified against real hardware in test_protocol.py:
@@ -23,7 +23,10 @@ def test_load_known_qrs_empty_when_missing(tmp_path):
 
 
 def test_save_qr_rejects_malformed_content(tmp_path):
-    with pytest.raises(Exception):
+    # save_qr validates via parse_qr_code, whose base64 decode raises
+    # binascii.Error. Asserting the concrete type rather than bare Exception
+    # keeps the test from passing for the wrong reason (a typo'd import, say).
+    with pytest.raises(binascii.Error):
         save_qr("not valid base64 or digits!!!", config_dir=tmp_path)
 
 

@@ -5,6 +5,8 @@
 [![Release](https://github.com/the78mole/hoermoles-ble/actions/workflows/pypi-publish.yml/badge.svg)](https://github.com/the78mole/hoermoles-ble/actions/workflows/pypi-publish.yml)
 [![Tests](https://github.com/the78mole/hoermoles-ble/actions/workflows/test.yml/badge.svg)](https://github.com/the78mole/hoermoles-ble/actions/workflows/test.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/the78mole/42b377cb18c21fa8d1cfee3fc3bc3605/raw/hoermoles-ble-coverage.json)](https://github.com/the78mole/hoermoles-ble/actions/workflows/test.yml)
+[![Web app](https://github.com/the78mole/hoermoles-ble/actions/workflows/spa-deploy.yml/badge.svg)](https://the78mole.github.io/hoermoles-ble/)
+[![SPA Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/the78mole/42b377cb18c21fa8d1cfee3fc3bc3605/raw/hoermoles-spa-coverage.json)](https://github.com/the78mole/hoermoles-ble/actions/workflows/spa-test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -19,12 +21,20 @@ Independent control of Hoermann garage door drives that use the BlueSecur BLE
   - `hoermoles-ble` - protocol/crypto core + BLE client (`packages/hoermoles-ble`)
   - `hoermoles-ble-cli` - test tool/CLI (`packages/hoermoles-ble-cli`)
   - `hoermoles-ble-homeassistant` - Home Assistant integration (placeholder, not implemented yet)
+- `spa/` - npm workspace for the web app:
+  - `hoermoles-ble-js` - TypeScript port of the protocol + a Web Bluetooth transport
+  - `webapp` - the installable PWA itself
+- `shared/` - **generated** language-neutral artifacts consumed by both sides
+  (`test-vectors.json`, `menu-tables.json`) plus the app artwork. Do not edit by
+  hand; see [Shared artifacts](#shared-artifacts).
 
-Planned, not yet started: our own single-page app, plus ports of the
-protocol library to other languages (see `python/packages/hoermoles-ble/src/hoermoles_ble/protocol.py`
-as the dependency-free reference implementation).
+`python/packages/hoermoles-ble/src/hoermoles_ble/protocol.py` remains the
+dependency-free reference implementation - further ports to other languages
+should start from it and from `shared/test-vectors.json`.
 
 ## Quickstart
+
+### CLI
 
 ```bash
 uv tool install hoermoles-ble-cli
@@ -33,3 +43,91 @@ hoermoles-ble scan
 
 Working on this repo instead? `cd python && uv sync`, then prefix commands
 with `uv run` - see `python/README.md`.
+
+### Web app
+
+<https://the78mole.github.io/hoermoles-ble/> - installable to the home screen
+and fully offline-capable after the first load.
+
+**Browser support is the limiting factor, not the app.** Web Bluetooth is
+implemented by Chrome and Edge on Android, Windows, macOS and ChromeOS; on Linux
+it additionally needs `chrome://flags/#enable-experimental-web-platform-features`.
+Safari and Firefox do not implement it at all, so **iOS/iPadOS cannot control a
+drive** - contributions porting this to a platform that can are welcome.
+
+Two further consequences of Web Bluetooth's current state, both flag-gated and
+both handled by feature detection rather than assumed:
+
+- Reading advertisement data (gate status, opening percentage) is not possible,
+  so the web app has no equivalent of the CLI's `scan` output.
+- Remembering a drive between app starts is not possible either, so you pick it
+  from the browser's Bluetooth chooser once per session.
+
+### Moving credentials between the CLI and the web app
+
+The web app cannot read `~/.hoermoles`, so credentials travel as a versioned
+bundle (`hoermoles_ble.bundle` / `spa/packages/hoermoles-ble-js/src/bundle.ts` -
+one spec, two implementations):
+
+```bash
+hoermoles-ble export                   # QR code in the terminal, scan it with the app
+hoermoles-ble export --stdout          # just the bundle text, to copy or pipe
+hoermoles-ble export --encrypt         # passphrase-protected (AES-256-GCM)
+hoermoles-ble export --out drive.json  # a file to load in the app instead
+hoermoles-ble import <file|text|->     # the reverse direction, e.g. from the app
+```
+
+Progress messages and warnings go to stderr, so `--stdout` yields exactly one
+line and composes:
+
+```bash
+hoermoles-ble export --stdout | ssh other-host hoermoles-ble import -
+hoermoles-ble export --stdout > backup.txt
+```
+
+A root key opens a physical door. Prefer `--encrypt` for anything that leaves
+the machine, and note that the app stores imported keys **non-extractably** by
+default - it can sign door commands afterwards but can never hand the key on
+again unless you explicitly opt into re-export.
+
+Drives can also be registered directly in the web app (camera QR scan), with no
+CLI involved at all.
+
+## Shared artifacts
+
+`shared/test-vectors.json` and `shared/menu-tables.json` are generated from the
+Python implementation and consumed by the TypeScript test suite. That is what
+keeps the port byte-identical rather than merely plausible.
+
+```bash
+cd python && uv run python scripts/generate_shared.py
+```
+
+`test_interop.py` fails if the committed files no longer match the code, so a
+forgotten regeneration is a red build rather than a silently stale port.
+
+## Development
+
+```bash
+make dev      # web app dev server on http://localhost:5173/hoermoles-ble/
+make build    # the static site exactly as GitHub Pages receives it
+make test     # every test suite: pytest and vitest
+make help     # everything else (lint, format, typecheck, shared, icons, preview, clean)
+```
+
+The Makefile only wraps `uv` and `npm`, which stay the source of truth; it
+installs dependencies on first use. The equivalents by hand:
+
+```bash
+cd python && uv sync --all-packages && uv run pytest
+cd spa && npm ci && npx vitest run && npm run dev
+```
+
+`pre-commit install` wires up ruff, ESLint/Prettier and the shared-artifact
+check. The ESLint/Prettier hooks call the project's own npm scripts, so
+`cd spa && npm ci` has to have run at least once.
+
+Web Bluetooth needs a secure context, which `localhost` counts as - so the dev
+server works without TLS. On Linux, Chrome additionally needs
+`chrome://flags/#enable-experimental-web-platform-features` before it will
+expose any Bluetooth at all.

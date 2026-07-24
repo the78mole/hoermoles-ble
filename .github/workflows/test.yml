@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'python/**'
+      - 'shared/**'  # test_interop.py asserts these stay in sync with the code
       - '.github/workflows/test.yml'
   workflow_call:  # so pypi-publish.yml can gate tagging/release on tests passing first
 

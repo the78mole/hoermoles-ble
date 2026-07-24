@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b2733" />
+
+    <!-- The Content-Security-Policy meta tag is injected by vite.config.ts, which
+         has to relax connect-src for the dev server's HMR websocket. See the
+         `csp` plugin there for the policy and the reasoning. -->
+
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+
+    <title>Hoermoles</title>
+
+    <style>
+      /* Inlined so the splash paints on the first frame, before any bundle
+         loads. main.ts removes #boot-splash once the app has mounted. */
+      body {
+        margin: 0;
+        background: #101a24;
+        color: #eef4fa;
+        font-family: system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        body {
+          background: #eef2f6;
+          color: #14212e;
+        }
+      }
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        text-align: center;
+      }
+      #boot-splash img {
+        width: min(60vw, 15rem);
+        border-radius: 1.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot-splash">
+      <img src="splash.webp" alt="" width="512" height="512" />
+      <p>Loading Hoermoles&hellip;</p>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

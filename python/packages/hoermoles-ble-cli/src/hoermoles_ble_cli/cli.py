@@ -30,24 +30,36 @@ Examples (after `uv sync` in the workspace root python/):
 
 import argparse
 import asyncio
+import getpass
+import sys
 import time
+from pathlib import Path
 
 from hoermoles_ble import (
     GATE_ACTIONS,
     LOG_TAG_NAMES,
+    PREFIX_ENCRYPTED,
+    PREFIX_PLAIN,
     SERVICE_TYPE_IS_TIMESTAMP,
     SERVICE_TYPE_NAMES,
+    BundleEntry,
+    BundleError,
     Credentials,
     DeviceInfo,
     DriveMenuTable,
     HoermannClient,
     PropertiesRejected,
     RegistrationTimeout,
+    bundle_to_json,
+    decode_bundle,
     default_credentials_path,
+    encode_bundle,
     find_qr_for_address,
     get_device_info,
+    is_encrypted_bundle,
     known_qr_serial_map,
     list_device_infos,
+    list_saved_credential_paths,
     log_timestamp_to_datetime,
     menu_setting_for_wire_group,
     menu_table_for_product,
@@ -65,7 +77,19 @@ from hoermoles_ble.protocol import parse_qr_code
 
 
 def log(msg: str) -> None:
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}")
+    """Progress and diagnostics go to stderr, never stdout.
+
+    Every command here keeps stdout for its actual result - scan findings, menu
+    values, log entries, and above all `export --stdout`, whose whole point is
+    to be copied or piped somewhere. Interleaving timestamped progress lines
+    with that output made it unusable for exactly that:
+
+        hoermoles-ble export --stdout | hoermoles-ble import -
+
+    Both streams still appear in a terminal, so nothing is hidden from an
+    interactive user.
+    """
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", file=sys.stderr)
 
 
 async def cmd_scan(args) -> None:
@@ -316,6 +340,143 @@ async def cmd_list_devices(args) -> None:
         )
 
 
+def _collect_bundle_entries(args) -> list[BundleEntry]:
+    """The drives to export: one specific --address, or (default) every drive we
+    hold credentials for. The non-secret product metadata from devices.json is
+    attached where known, so the web app can pick the right menu table without
+    needing a BLE scan of its own."""
+    if args.address:
+        paths = [default_credentials_path(args.address, args.config_dir)]
+        if not paths[0].exists():
+            raise SystemExit(f"No saved credentials for {args.address} ({paths[0]}).")
+    else:
+        paths = list_saved_credential_paths(args.config_dir)
+        if not paths:
+            raise SystemExit("No saved credentials to export - register a device first.")
+
+    entries = []
+    for path in paths:
+        credentials = Credentials.load(path)
+        device_info = get_device_info(credentials.device_address, config_dir=args.config_dir)
+        entries.append(BundleEntry(credentials=credentials, device_info=device_info))
+    return entries
+
+
+def _ask_passphrase(confirm: bool) -> str:
+    passphrase = getpass.getpass("Passphrase: ")
+    if not passphrase:
+        raise SystemExit("Empty passphrase - aborting.")
+    if confirm and getpass.getpass("Repeat passphrase: ") != passphrase:
+        raise SystemExit("Passphrases do not match - aborting.")
+    return passphrase
+
+
+def _print_qr(text: str) -> None:
+    try:
+        import segno
+    except ImportError as exc:  # pragma: no cover - depends on the install extra
+        raise SystemExit(
+            "QR output needs the 'segno' package - install hoermoles-ble-cli with its "
+            "default dependencies, or use --out/--stdout instead."
+        ) from exc
+
+    # error="l" (7% recovery): the code is shown on a clean screen and scanned
+    # immediately, so spending modules on damage tolerance only makes it denser
+    # and harder for a phone camera to resolve.
+    qr = segno.make(text, error="l")
+    qr.terminal(compact=True)
+    print(f"\n({len(text)} characters, QR version {qr.version})")
+    if qr.version >= 20:
+        print(
+            "This code is dense - if your camera struggles, export one drive at a time\n"
+            "(--address) or use --out to write a JSON file instead."
+        )
+
+
+async def cmd_export(args) -> None:
+    """Hand credentials to another client - above all the web app, which has no
+    access to ~/.hoermoles. See hoermoles_ble.bundle for the wire format."""
+    entries = _collect_bundle_entries(args)
+    passphrase = _ask_passphrase(confirm=True) if args.encrypt else None
+
+    if args.out:
+        if passphrase is not None:
+            raise SystemExit("--encrypt applies to the text/QR form only; the JSON file form is always plaintext.")
+        target = Path(args.out)
+        target.write_text(bundle_to_json(entries))
+        target.chmod(0o600)
+        log(f"Wrote {len(entries)} credential(s) to {target} - this file contains root keys, treat it accordingly.")
+        return
+
+    text = encode_bundle(entries, passphrase=passphrase)
+
+    if args.stdout:
+        print(text)
+    else:
+        _print_qr(text)
+
+    log(f"{len(entries)} credential(s) encoded.")
+    if passphrase is None:
+        log(
+            "WARNING: this is an UNENCRYPTED root key - anyone who photographs or "
+            "copies it can operate the drive. Use --encrypt for anything that leaves "
+            "this machine or gets shown on a shared screen."
+        )
+
+
+def _read_bundle_source(source: str) -> str:
+    """Resolves the `import` argument, which may be '-' for stdin, a file path,
+    or the bundle text itself.
+
+    The text forms are checked *before* touching the filesystem on purpose: a
+    bundle string is far longer than any filesystem's maximum filename, and on
+    Python <= 3.11 `Path.exists()` raises OSError(ENAMETOOLONG) instead of
+    returning False (3.12 widened the errnos it swallows). Probing the path
+    first therefore crashed on exactly the input this command exists to accept.
+    """
+    if source == "-":
+        return sys.stdin.read()
+
+    stripped = source.strip()
+    if stripped.startswith((PREFIX_PLAIN, PREFIX_ENCRYPTED, "{")) or "#import=" in stripped:
+        return source
+
+    try:
+        path = Path(source)
+        if path.exists():
+            return path.read_text()
+    except OSError:
+        pass  # not a usable path - fall through and let decode_bundle judge it
+
+    return source
+
+
+async def cmd_import(args) -> None:
+    """Read a bundle produced by 'export' or by the web app back into
+    ~/.hoermoles - the reverse direction, so a drive registered on a phone
+    becomes usable from the CLI and (later) Home Assistant."""
+    text = _read_bundle_source(args.source)
+
+    passphrase = _ask_passphrase(confirm=False) if is_encrypted_bundle(text) else None
+
+    try:
+        entries = decode_bundle(text, passphrase=passphrase)
+    except BundleError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    for entry in entries:
+        address = entry.credentials.device_address
+        target = default_credentials_path(address, args.config_dir)
+        if target.exists() and not args.force:
+            log(f"SKIP {address}: credentials already exist at {target} (use --force to overwrite)")
+            continue
+        saved_path = entry.credentials.save(config_dir=args.config_dir)
+        log(f"Imported {address} (RootID={entry.credentials.root_id}) to {saved_path}")
+        if entry.device_info is not None:
+            save_device_info(entry.device_info, config_dir=args.config_dir)
+            log(f"  Product type: {entry.device_info.product_name or 'unknown'}")
+
+
 async def cmd_view_log(args) -> None:
     credentials = _load_credentials(args)
     address = args.address or credentials.device_address
@@ -510,6 +671,52 @@ def main() -> None:
         "and whether we also hold credentials for it ('registered').",
     )
     p_list_devices.set_defaults(func=cmd_list_devices)
+
+    p_export = sub.add_parser(
+        "export",
+        formatter_class=_HelpFormatter,
+        help="uv run hoermoles-ble export [--address <MAC>] [--encrypt|--out FILE]",
+        description="Export saved credentials as a transportable bundle, so another client "
+        "- above all the web app, which cannot read ~/.hoermoles - can use them. "
+        "Default output is a QR code in the terminal; --out writes a JSON file "
+        "instead. A root key is a physical door key: prefer --encrypt for "
+        "anything that leaves this machine.",
+    )
+    p_export.add_argument(
+        "--address",
+        default=None,
+        help="Only export this drive. Default: every drive with saved credentials.",
+    )
+    p_export.add_argument(
+        "--encrypt",
+        action="store_true",
+        help="Protect the text/QR form with a passphrase (AES-256-GCM, PBKDF2-SHA256). Prompts for it.",
+    )
+    output_group = p_export.add_mutually_exclusive_group()
+    output_group.add_argument("--out", default=None, help="Write a JSON bundle file instead of printing a QR code")
+    output_group.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Print the bundle text (HMOLES1:...) instead of a QR code - for piping/copying",
+    )
+    p_export.set_defaults(func=cmd_export)
+
+    p_import = sub.add_parser(
+        "import",
+        formatter_class=_HelpFormatter,
+        help="uv run hoermoles-ble import <file|text|->",
+        description="Import a credential bundle produced by 'export' or by the web app into "
+        "the local config dir. Accepts a file path, the bundle text itself, a "
+        "full '#import=...' URL, or '-' to read stdin. Prompts for the "
+        "passphrase if the bundle is encrypted.",
+    )
+    p_import.add_argument("source", help="Bundle file path, bundle text, import URL, or '-' for stdin")
+    p_import.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite credentials that already exist for a device (default: skip them)",
+    )
+    p_import.set_defaults(func=cmd_import)
 
     p_view_log = sub.add_parser(
         "view-log",

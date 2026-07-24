@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // "node" is for the test suite only - it reads shared/*.json off disk.
+    // Nothing under src/ may import a node: module; the library has to run in
+    // a browser.
+    "types": ["web-bluetooth", "node"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "hoermoles-ble[bleak]",
+    "segno>=1.6",  # pure-Python QR rendering for `export` (terminal output, no native deps)
 ]
 
 [project.scripts]

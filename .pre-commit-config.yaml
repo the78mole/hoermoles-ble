@@ -9,6 +9,11 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-json
+        # tsconfig.json is JSONC, not JSON - TypeScript documents and supports
+        # comments there, and the files carry non-obvious rationale (why "node"
+        # is in `types`, why TS is pinned). This hook uses a strict JSON parser,
+        # so exclude them rather than strip the explanations.
+        exclude: ^spa/.*/tsconfig\.json$
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: debug-statements
@@ -27,3 +32,32 @@ repos:
     rev: 0.37.4
     hooks:
       - id: check-github-workflows
+
+  # ESLint/Prettier run through the project's own npm scripts rather than a
+  # pre-commit mirror, so the versions here are exactly the ones npm resolved -
+  # no second source of truth to drift. Requires `cd spa && npm ci` to have run.
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: bash -c 'cd spa && npx eslint .'
+        language: system
+        files: ^spa/.*\.(js|ts|svelte)$
+        pass_filenames: false
+
+      - id: prettier
+        name: Prettier
+        entry: bash -c 'cd spa && npx prettier --write .'
+        language: system
+        files: ^spa/.*\.(js|ts|svelte|css|json|html|md)$
+        pass_filenames: false
+
+      # shared/*.json is generated from the Python implementation; a stale file
+      # means the TypeScript port is being tested against expectations that no
+      # longer match. Catch it at commit time rather than in CI.
+      - id: shared-artifacts-up-to-date
+        name: shared/ artifacts match the Python implementation
+        entry: bash -c 'cd python && uv run pytest packages/hoermoles-ble/tests/test_interop.py -q'
+        language: system
+        files: ^(python/packages/hoermoles-ble/src/hoermoles_ble/(protocol|menu_settings|interop|bundle)\.py|shared/.*\.json)$
+        pass_filenames: false

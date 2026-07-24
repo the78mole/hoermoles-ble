@@ -10,7 +10,18 @@ __pycache__/
 coverage.xml
 .pytest_cache/
 
+# JS/SPA
+node_modules/
+dist/
+dev-dist/
+coverage/
+*.tsbuildinfo
+
 # Local configuration (incl. HOERMOLES_CONF_DIR for development)
 .env
 .env.*
 .hoermoles/
+
+# Exported credential bundles contain root keys - a stray one must never be
+# committed. See hoermoles_ble.bundle.
+*hoermoles-credentials*.json

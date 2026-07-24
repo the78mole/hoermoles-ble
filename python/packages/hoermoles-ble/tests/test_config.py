@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import hoermoles_ble.config as config
+from hoermoles_ble import config
 
 
 def test_resolve_config_dir_override_wins(tmp_path, monkeypatch):
