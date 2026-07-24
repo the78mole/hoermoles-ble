@@ -11,6 +11,17 @@
         "minor"
       ],
       "groupName": "Dependencies (minor)"
+    },
+    {
+      "description": [
+        "Hold TypeScript at 5.x. TypeScript 7 is the native (Go) port and no longer exposes the CJS API surface the tooling reaches for: both svelte-check and ESLint crash outright with 'Cannot read properties of undefined (reading useCaseSensitiveFileNames)', verified locally, not merely a peer-range warning.",
+        "typescript-eslint 8.65.0 (its latest) still declares peer typescript '>=4.8.4 <6.1.0'.",
+        "Remove this rule once typescript-eslint and svelte-check ship TypeScript 7 support; the pin in spa/package.json carries the same note."
+      ],
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": "<6.0.0"
     }
   ],
   "labels": [
