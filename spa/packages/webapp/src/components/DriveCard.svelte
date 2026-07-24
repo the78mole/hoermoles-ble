@@ -1,9 +1,15 @@
 <script lang="ts">
-  import { GATE_ACTIONS, type GateAction, type StoredCredential } from 'hoermoles-ble-js';
+  import {
+    GATE_ACTIONS,
+    type DecodedLogEntry,
+    type GateAction,
+    type StoredCredential,
+  } from 'hoermoles-ble-js';
 
   import { credentialsFor, displayName, forgetDrive, renameDrive } from '../lib/drives.svelte';
-  import { addLog, pickDrive, sendChannel } from '../lib/session.svelte';
+  import { addLog, pickDrive, readDriveLog, sendChannel } from '../lib/session.svelte';
   import Icon, { type IconName } from './Icon.svelte';
+  import LogView from './LogView.svelte';
 
   interface Props {
     drive: StoredCredential;
@@ -21,6 +27,9 @@
   let editing = $state(false);
   let draftName = $state('');
   let confirmForget = $state(false);
+
+  let loadingLog = $state(false);
+  let logEntries = $state<DecodedLogEntry[] | null>(null);
 
   // Icon + label for each action. Only `impulse` is verified against real
   // hardware; the rest are derived from the decompiled app and may behave
@@ -57,6 +66,28 @@
       status = { kind: 'danger', text: message };
     } finally {
       busy = null;
+    }
+  }
+
+  async function loadLog() {
+    if (loadingLog || editing) return;
+    // A second tap on an open log hides it, so it doubles as a toggle.
+    if (logEntries !== null) {
+      logEntries = null;
+      return;
+    }
+    loadingLog = true;
+    status = null;
+    try {
+      const target = device ?? (await pickDrive());
+      if (target !== device) onDeviceChange(target);
+      logEntries = await readDriveLog(target, credentialsFor(drive));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addLog(message, 'error');
+      status = { kind: 'danger', text: message };
+    } finally {
+      loadingLog = false;
     }
   }
 
@@ -166,8 +197,23 @@
             <span>{busy === action ? '…' : ACTIONS[action].label}</span>
           </button>
         {/each}
+        <button
+          class="action"
+          aria-pressed={logEntries !== null}
+          disabled={loadingLog || editing}
+          onclick={loadLog}
+        >
+          <Icon name="history" size={26} />
+          <span>{loadingLog ? '…' : logEntries !== null ? 'Hide log' : 'Log'}</span>
+        </button>
       {/if}
     </div>
+
+    {#if logEntries !== null}
+      <div class="notice">
+        <LogView entries={logEntries} />
+      </div>
+    {/if}
 
     {#if !device}
       <p class="muted">You will be asked to pick the drive from the Bluetooth chooser.</p>

@@ -16,8 +16,10 @@
 import {
   HoermannClient,
   WebBluetoothTransport,
+  decodeLogEntry,
   rememberedDrives,
   requestDrive,
+  type DecodedLogEntry,
   type DriveCredentials,
 } from 'hoermoles-ble-js';
 
@@ -115,5 +117,17 @@ export async function sendChannel(
     } catch {
       /* expected often enough not to be worth reporting */
     }
+  });
+}
+
+/** Reads the drive's security/access audit log and decodes each entry for
+ * display. The drive sends entries newest-first and this preserves that order. */
+export async function readDriveLog(
+  device: BluetoothDevice,
+  credentials: DriveCredentials,
+): Promise<DecodedLogEntry[]> {
+  return withConnection(device, async (client) => {
+    const entries = await client.readLog(credentials);
+    return entries.map(decodeLogEntry);
   });
 }

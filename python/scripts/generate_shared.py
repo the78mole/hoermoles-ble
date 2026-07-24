@@ -16,13 +16,14 @@ import json
 import sys
 from pathlib import Path
 
-from hoermoles_ble.interop import build_menu_tables, build_test_vectors
+from hoermoles_ble.interop import build_device_log, build_menu_tables, build_test_vectors
 
 SHARED_DIR = Path(__file__).resolve().parents[2] / "shared"
 
 ARTIFACTS = {
     "test-vectors.json": build_test_vectors,
     "menu-tables.json": build_menu_tables,
+    "device-log.json": build_device_log,
 }
 
 

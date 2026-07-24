@@ -501,5 +501,277 @@
       "passphrase": "correct horse battery staple",
       "text": "HMOLES1E:SE0xRQABAgMEBQYHCAkKCwwNDg9kZWZnaGlqa2xtbm_xwuntzmaZEaPjP40cds61q_rQ9iBfRi-U0T-dGCaP_3uQLy1nYBLYni3XnPaISuEGaLVG8nZAxO9qx_CxAtdXdwUl35Kf0vhvIEPDf8fH3tXhSwONmQk2ANjRC9xNqs07ULNzt5XWzy-9sdcVjh6QUe_J5ezVrS0C6xNo3iqFJt1Sa9-vtsrzmP_ayeMZ5z_qA5JZ1CldA-YILrnEYZHWnfRTUbAj_b4mgGGzWWXSZ6L7zmG2uk9Z30_obyeAasMi3NkvkrOCmiO7k7RIQDq9BZgk9uH0D-kb_8OIQsNYQ58ijv8PZda5mUPKFhNV9bpeqeJFWw0j-lC64dtVk7NiUNUUZUkVnYDNG7HnNgiK6aNdDSc36gQEGExtc1wXHU8rmYCE-Z2pTTn-pv-aDX3MQSFhOlFOtEmeuK5k0DhJvsLVIBoWhUDykLYeGGjsDr49-Tow2_iL98_Fp1RY4dpOI3emWIqwmYuOYqKuPjXzYszytjtdYn4hWxPgEEqdpizHXHBG2Z-ZOQ"
     }
-  }
+  },
+  "log_fields": [
+    {
+      "name": "register_root",
+      "log_tag": 1,
+      "tag_name": "REGISTER_ROOT",
+      "data": "0500",
+      "expected": {
+        "causing_admin_id": 5
+      }
+    },
+    {
+      "name": "relais",
+      "log_tag": 2,
+      "tag_name": "RELAIS",
+      "data": "050007090002",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 7,
+        "otk_id": 9,
+        "toggled_channel": 2
+      }
+    },
+    {
+      "name": "blocked_admin",
+      "log_tag": 3,
+      "tag_name": "BLOCKED_ADMIN",
+      "data": "05000900",
+      "expected": {
+        "causing_admin_id": 5,
+        "admin_id": 9
+      }
+    },
+    {
+      "name": "blocked_user",
+      "log_tag": 4,
+      "tag_name": "BLOCKED_USER",
+      "data": "050009000d00",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 9,
+        "otk_id": 13
+      }
+    },
+    {
+      "name": "blocked_otk",
+      "log_tag": 5,
+      "tag_name": "BLOCKED_OTK",
+      "data": "050009000d",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 9,
+        "otk_id": 13
+      }
+    },
+    {
+      "name": "executed_admin_action_get_log",
+      "log_tag": 6,
+      "tag_name": "EXECUTED_ADMIN_ACTION",
+      "data": "05002100",
+      "expected": {
+        "causing_admin_id": 5,
+        "action": "GET_LOG"
+      }
+    },
+    {
+      "name": "executed_admin_action_channel1_by_user",
+      "log_tag": 6,
+      "tag_name": "EXECUTED_ADMIN_ACTION",
+      "data": "05001101",
+      "expected": {
+        "causing_admin_id": 5,
+        "action": "CHANNEL_1 (by user/OTK)"
+      }
+    },
+    {
+      "name": "relais_admin_only",
+      "log_tag": 2,
+      "tag_name": "RELAIS",
+      "data": "0500",
+      "expected": {
+        "causing_admin_id": 5
+      }
+    },
+    {
+      "name": "impuls_with_clock_no_times",
+      "log_tag": 9,
+      "tag_name": "IMPULS_WITH_CLOCK",
+      "data": "030001",
+      "expected": {
+        "causing_admin_id": 3,
+        "toggled_channel": 1
+      }
+    },
+    {
+      "name": "impuls_with_clock_old_only",
+      "log_tag": 9,
+      "tag_name": "IMPULS_WITH_CLOCK",
+      "data": "03000100350c00",
+      "expected": {
+        "causing_admin_id": 3,
+        "toggled_channel": 1,
+        "old_time": 947484800000
+      }
+    },
+    {
+      "name": "clocktime_changed_no_times",
+      "log_tag": 7,
+      "tag_name": "CLOCKTIME_CHANGED",
+      "data": "0500",
+      "expected": {
+        "causing_admin_id": 5
+      }
+    },
+    {
+      "name": "clocktime_changed_old_only",
+      "log_tag": 7,
+      "tag_name": "CLOCKTIME_CHANGED",
+      "data": "050040420f00",
+      "expected": {
+        "causing_admin_id": 5,
+        "old_time": 947684800000
+      }
+    },
+    {
+      "name": "register_root_too_short",
+      "log_tag": 1,
+      "tag_name": "REGISTER_ROOT",
+      "data": "05",
+      "expected": {}
+    },
+    {
+      "name": "blocked_admin_too_short",
+      "log_tag": 3,
+      "tag_name": "BLOCKED_ADMIN",
+      "data": "0500",
+      "expected": {}
+    },
+    {
+      "name": "blocked_user_admin_only",
+      "log_tag": 4,
+      "tag_name": "BLOCKED_USER",
+      "data": "0500",
+      "expected": {
+        "causing_admin_id": 5
+      }
+    },
+    {
+      "name": "blocked_user_no_otk",
+      "log_tag": 4,
+      "tag_name": "BLOCKED_USER",
+      "data": "05000900",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 9
+      }
+    },
+    {
+      "name": "blocked_otk_no_otk",
+      "log_tag": 5,
+      "tag_name": "BLOCKED_OTK",
+      "data": "05000900",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 9
+      }
+    },
+    {
+      "name": "executed_admin_action_admin_only",
+      "log_tag": 6,
+      "tag_name": "EXECUTED_ADMIN_ACTION",
+      "data": "0500",
+      "expected": {
+        "causing_admin_id": 5
+      }
+    },
+    {
+      "name": "action_rejected_admin_only",
+      "log_tag": 8,
+      "tag_name": "ACTION_REJECTED",
+      "data": "0500",
+      "expected": {
+        "causing_admin_id": 5
+      }
+    },
+    {
+      "name": "action_rejected_user_only",
+      "log_tag": 8,
+      "tag_name": "ACTION_REJECTED",
+      "data": "050007",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 7
+      }
+    },
+    {
+      "name": "action_rejected_no_action",
+      "log_tag": 8,
+      "tag_name": "ACTION_REJECTED",
+      "data": "0500070900",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 7,
+        "otk_id": 9
+      }
+    },
+    {
+      "name": "action_rejected_no_notification",
+      "log_tag": 8,
+      "tag_name": "ACTION_REJECTED",
+      "data": "05000709001100",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 7,
+        "otk_id": 9,
+        "action": "CHANNEL_1"
+      }
+    },
+    {
+      "name": "clocktime_changed",
+      "log_tag": 7,
+      "tag_name": "CLOCKTIME_CHANGED",
+      "data": "050040420f007c420f00",
+      "expected": {
+        "causing_admin_id": 5,
+        "old_time": 947684800000,
+        "new_time": 947684860000
+      }
+    },
+    {
+      "name": "action_rejected",
+      "log_tag": 8,
+      "tag_name": "ACTION_REJECTED",
+      "data": "050007090011001600",
+      "expected": {
+        "causing_admin_id": 5,
+        "user_id": 7,
+        "otk_id": 9,
+        "action": "CHANNEL_1",
+        "notification": "IMPULS_INVALID_CLOCK"
+      }
+    },
+    {
+      "name": "impuls_with_clock",
+      "log_tag": 9,
+      "tag_name": "IMPULS_WITH_CLOCK",
+      "data": "03000100350c0005350c00",
+      "expected": {
+        "causing_admin_id": 3,
+        "toggled_channel": 1,
+        "old_time": 947484800000,
+        "new_time": 947484805000
+      }
+    }
+  ],
+  "log_timestamps": [
+    {
+      "wire": 0,
+      "expected_ms": 946684800000
+    },
+    {
+      "wire": 1,
+      "expected_ms": 946684801000
+    },
+    {
+      "wire": 1000000,
+      "expected_ms": 947684800000
+    },
+    {
+      "wire": 800005,
+      "expected_ms": 947484805000
+    }
+  ]
 }

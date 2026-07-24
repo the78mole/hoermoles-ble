@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 import pytest
-from hoermoles_ble.interop import build_menu_tables, build_test_vectors
+from hoermoles_ble.interop import build_device_log, build_menu_tables, build_test_vectors
 
 SHARED_DIR = Path(__file__).resolve().parents[3].parent / "shared"
 REGENERATE_HINT = "cd python && uv run python scripts/generate_shared.py"
@@ -29,7 +29,11 @@ def _load(filename: str) -> dict:
 
 @pytest.mark.parametrize(
     "filename, builder",
-    [("test-vectors.json", build_test_vectors), ("menu-tables.json", build_menu_tables)],
+    [
+        ("test-vectors.json", build_test_vectors),
+        ("menu-tables.json", build_menu_tables),
+        ("device-log.json", build_device_log),
+    ],
 )
 def test_shared_artifact_is_up_to_date(filename, builder):
     assert _load(filename) == builder(), (

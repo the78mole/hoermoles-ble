@@ -21,3 +21,4 @@ export * from './web-bluetooth.js';
 export * from './store.js';
 export * from './client.js';
 export * from './menu-tables.js';
+export * from './device-log.js';

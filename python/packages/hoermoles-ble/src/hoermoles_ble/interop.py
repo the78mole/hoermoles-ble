@@ -30,12 +30,23 @@ found). See bundle.py, which carries them the same way for the same reason.
 
 from __future__ import annotations
 
+import struct
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any
 
 from .advertisement import AdvertisementInfo
 from .bundle import BundleEntry, bundle_to_json, encode_bundle
 from .credentials import Credentials
+from .device_log import (
+    DEVICE_ACTION_NAMES,
+    LOG_TAG_NAMES,
+    SERVICE_TYPE_IS_TIMESTAMP,
+    SERVICE_TYPE_NAMES,
+    SIGNED_NOTIFICATION_TYPE_NAMES,
+    log_timestamp_to_datetime,
+    parse_log_fields,
+)
 from .devices import DeviceInfo
 from .menu_settings import DRIVE_MENU_TABLES
 from .protocol import (
@@ -353,6 +364,92 @@ def _bundle_vectors() -> dict[str, Any]:
     }
 
 
+def _serialize_log_field(value: Any) -> Any:
+    """Log-field time values are datetimes; represent them as epoch milliseconds
+    so a port can compare against a JS Date without any ISO-format ambiguity.
+    Everything else (ids, action/notification names) passes through."""
+    if isinstance(value, datetime):
+        return int(value.timestamp() * 1000)
+    return value
+
+
+def _log_field_vectors() -> list[dict[str, Any]]:
+    """parse_log_fields + log_timestamp_to_datetime for one hand-built data blob
+    per interesting LogTag, so the port's decoder is byte-verified. Layouts follow
+    device_log.parse_log_fields exactly (including its documented off-by-one
+    quirks); time fields in `expected` are epoch milliseconds."""
+    cases: list[tuple[str, int, bytes]] = [
+        # REGISTER_ROOT: causing_admin_id(2 LE)
+        ("register_root", 1, struct.pack("<H", 5)),
+        # RELAIS: admin(2) + user(1) + otk(2) + channel(1)
+        ("relais", 2, struct.pack("<H", 5) + b"\x07" + struct.pack("<H", 9) + b"\x02"),
+        # BLOCKED_ADMIN: causing_admin(2) + admin(2)
+        ("blocked_admin", 3, struct.pack("<H", 5) + struct.pack("<H", 9)),
+        # BLOCKED_USER: causing_admin(2) + user(2) + otk(2)
+        ("blocked_user", 4, struct.pack("<H", 5) + struct.pack("<H", 9) + struct.pack("<H", 13)),
+        # BLOCKED_OTK: causing_admin(2) + user(2) + otk(1)
+        ("blocked_otk", 5, struct.pack("<H", 5) + struct.pack("<H", 9) + b"\x0d"),
+        # EXECUTED_ADMIN_ACTION: admin(2) + action(2). 0x0021 -> GET_LOG
+        ("executed_admin_action_get_log", 6, struct.pack("<H", 5) + struct.pack("<H", 0x0021)),
+        # same, with the 0x100 "by user/OTK" bit set on CHANNEL_1 (0x0011)
+        ("executed_admin_action_channel1_by_user", 6, struct.pack("<H", 5) + struct.pack("<H", 0x0111)),
+        # Truncated blobs that exercise the early-return guards: only the fields
+        # the length allows must appear. These matter because the port mirrors
+        # each guard, and a mismatched boundary would silently mis-decode.
+        ("relais_admin_only", 2, struct.pack("<H", 5)),
+        ("impuls_with_clock_no_times", 9, struct.pack("<H", 3) + b"\x01"),
+        ("impuls_with_clock_old_only", 9, struct.pack("<H", 3) + b"\x01" + struct.pack("<I", 800_000)),
+        ("clocktime_changed_no_times", 7, struct.pack("<H", 5)),
+        ("clocktime_changed_old_only", 7, struct.pack("<H", 5) + struct.pack("<I", 1_000_000)),
+        ("register_root_too_short", 1, b"\x05"),
+        ("blocked_admin_too_short", 3, struct.pack("<H", 5)),
+        ("blocked_user_admin_only", 4, struct.pack("<H", 5)),
+        ("blocked_user_no_otk", 4, struct.pack("<H", 5) + struct.pack("<H", 9)),
+        ("blocked_otk_no_otk", 5, struct.pack("<H", 5) + struct.pack("<H", 9)),
+        ("executed_admin_action_admin_only", 6, struct.pack("<H", 5)),
+        ("action_rejected_admin_only", 8, struct.pack("<H", 5)),
+        ("action_rejected_user_only", 8, struct.pack("<H", 5) + b"\x07"),
+        ("action_rejected_no_action", 8, struct.pack("<H", 5) + b"\x07" + struct.pack("<H", 9)),
+        (
+            "action_rejected_no_notification",
+            8,
+            struct.pack("<H", 5) + b"\x07" + struct.pack("<H", 9) + struct.pack("<H", 0x0011),
+        ),
+        # CLOCKTIME_CHANGED: admin(2) + old_time(4) + new_time(4)
+        ("clocktime_changed", 7, struct.pack("<H", 5) + struct.pack("<I", 1_000_000) + struct.pack("<I", 1_000_060)),
+        # ACTION_REJECTED: admin(2)+user(1)+otk(2)+action(2)+notification(2)
+        (
+            "action_rejected",
+            8,
+            struct.pack("<H", 5) + b"\x07" + struct.pack("<H", 9) + struct.pack("<H", 0x0011) + struct.pack("<H", 22),
+        ),
+        # IMPULS_WITH_CLOCK: admin(2)+channel(1)+old_time(4)+new_time(4)
+        (
+            "impuls_with_clock",
+            9,
+            struct.pack("<H", 3) + b"\x01" + struct.pack("<I", 800_000) + struct.pack("<I", 800_005),
+        ),
+    ]
+    return [
+        {
+            "name": name,
+            "log_tag": tag,
+            "tag_name": LOG_TAG_NAMES.get(tag),
+            "data": data.hex(),
+            "expected": {key: _serialize_log_field(value) for key, value in parse_log_fields(tag, data).items()},
+        }
+        for name, tag, data in cases
+    ]
+
+
+def _timestamp_vectors() -> list[dict[str, Any]]:
+    """log_timestamp_to_datetime: seconds since 2000-01-01 UTC -> epoch ms."""
+    return [
+        {"wire": wire, "expected_ms": int(log_timestamp_to_datetime(wire).timestamp() * 1000)}
+        for wire in (0, 1, 1_000_000, 800_005)
+    ]
+
+
 def build_test_vectors() -> dict[str, Any]:
     """The full `shared/test-vectors.json` payload."""
     return {
@@ -373,6 +470,28 @@ def build_test_vectors() -> dict[str, Any]:
         "misc": _misc_vectors(),
         "advertisements": _advertisement_vectors(),
         "bundles": _bundle_vectors(),
+        "log_fields": _log_field_vectors(),
+        "log_timestamps": _timestamp_vectors(),
+    }
+
+
+def build_device_log() -> dict[str, Any]:
+    """The `shared/device-log.json` payload: the audit-log and service-data enum
+    name maps from device_log.py, as data. Int keys become strings (JSON), and
+    the port turns them back into numbers on load."""
+    return {
+        "_comment": (
+            "Generated by hoermoles_ble.interop via python/scripts/generate_shared.py - do not edit by hand. "
+            "Source of truth is hoermoles_ble/device_log.py. Keys are wire values as strings."
+        ),
+        # Seconds since 2000-01-01 UTC as a Unix timestamp, so a port can decode
+        # log-entry times without hardcoding the epoch (946684800).
+        "log_epoch_unix": int(log_timestamp_to_datetime(0).timestamp()),
+        "log_tag_names": {str(k): v for k, v in LOG_TAG_NAMES.items()},
+        "device_action_names": {str(k): v for k, v in DEVICE_ACTION_NAMES.items()},
+        "signed_notification_type_names": {str(k): v for k, v in SIGNED_NOTIFICATION_TYPE_NAMES.items()},
+        "service_type_names": {str(k): v for k, v in SERVICE_TYPE_NAMES.items()},
+        "service_type_is_timestamp": sorted(SERVICE_TYPE_IS_TIMESTAMP),
     }
 
 
