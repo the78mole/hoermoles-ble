@@ -7,7 +7,7 @@ Reconstructed from SAL.BlueConnect.API.Devices.Info.DeviceData (BLEAdvertisement
 BlueSecurAdvertisementService.cs, ServiceProduct.cs, product-specific *AdvertisementService.cs)
 and verified empirically against a real, freshly reset drive: after a reset via
 menu 19/parameter 02, `admins_can_be_teached` reliably flipped from False to
-True - confirming the bit position. See reveng/ANALYSIS.md section 8.3.
+True - confirming the bit position.
 
 Important quirk: the device sends the content for Company ID 1972 across two
 different, alternating manufacturer-data packets (6 and 17 bytes on our test
@@ -157,6 +157,6 @@ class AdvertisementInfo:
 
         # BLEAdvertisementData.ParseData: the serial number follows as a uint64 LE
         # from position 17 (4+13) onward - verified live against the QR code prefix
-        # of the same device (see protocol.serial_no_from_qr_prefix / reveng/ANALYSIS.md).
+        # of the same device (see protocol.serial_no_from_qr_prefix).
         if len(data) >= 25:
             self.serial_no = struct.unpack_from("<Q", data, 17)[0]

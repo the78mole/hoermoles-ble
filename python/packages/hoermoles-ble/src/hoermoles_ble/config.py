@@ -11,9 +11,9 @@ with a fixed priority:
    python-dotenv's load_dotenv() (no override=True).
 4. Default: ~/.hoermoles
 
-For development, a .env with HOERMOLES_CONF_DIR=../reveng/.hoermoles-dev lives
-in the workspace root (python/), so test credentials don't get mixed up with
-"real" ones under ~/.hoermoles.
+For development, a .env pointing HOERMOLES_CONF_DIR at a scratch directory
+outside the repo keeps test credentials separate from "real" ones under
+~/.hoermoles.
 """
 from __future__ import annotations
 

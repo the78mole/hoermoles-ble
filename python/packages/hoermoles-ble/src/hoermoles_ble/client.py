@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from .credentials import Credentials
 from .crypto_rsa import load_device_public_key, rsa_pkcs1v15_encrypt
@@ -18,13 +18,24 @@ from .protocol import (
     ENCRYPTED_ACK_COMPLETE,
     ENCRYPTED_ACK_CONTINUE,
     ENCRYPTED_ACK_ERROR,
+    NOTIF_LOG_END,
+    NOTIF_PROPERTIES_INVALID,
+    NOTIF_PROPERTIES_LIST_END,
+    NOTIF_PROPERTY_ACCEPTED,
     NOTIF_ROOT_KEY,
+    NOTIF_SERVICE_DATA_END,
     ROUTING_ENCRYPTED,
     ROUTING_SIGNED,
     NotificationReassembler,
     ParsedSignedNotification,
+    batch_menu_groups_for_selected_properties,
+    build_get_log_frame,
+    build_get_properties_frame,
+    build_get_selected_properties_frame,
+    build_read_service_data_frame,
     build_register_root_frame,
     build_registration_frame,
+    build_set_properties_frame,
     build_switch_relais_frame,
     chunk,
     derive_root_key,
@@ -39,8 +50,12 @@ class RegistrationTimeout(TimeoutError):
     Most common cause: the advertisement bit `AdminsCanBeTeached` is False,
     i.e. the drive already has an admin and won't accept a new root
     registration until it has been reset via menu 19/parameter 02.
-    See reveng/ANALYSIS.md section 8.2.
     """
+
+
+class PropertiesRejected(RuntimeError):
+    """The drive answered a SET_PROPERTIES batch with PROPERTIES_INVALID
+    (e.g. an out-of-range value for one of the menus in that batch)."""
 
 
 class HoermannClient:
@@ -52,6 +67,7 @@ class HoermannClient:
         self._last_encrypted_ack: Optional[int] = None
         self._signed_event = asyncio.Event()
         self._encrypted_event = asyncio.Event()
+        self._extra_signed_queues: List["asyncio.Queue[ParsedSignedNotification]"] = []
 
     async def __aenter__(self) -> "HoermannClient":
         await self._transport.connect()
@@ -79,6 +95,8 @@ class HoermannClient:
                              f"challenge={notif.challenge.hex()} payload={notif.payload.hex()}")
                 self._last_signed = notif
                 self._signed_event.set()
+                for queue in self._extra_signed_queues:
+                    queue.put_nowait(notif)
             elif io_id == ROUTING_ENCRYPTED:
                 status = payload[0] if payload else None
                 self._on_log(f"Encrypted acknowledgement status={status}")
@@ -96,6 +114,27 @@ class HoermannClient:
                 self._signed_event.clear()
                 await self._signed_event.wait()
         return await asyncio.wait_for(_loop(), timeout=timeout)
+
+    async def _collect_signed_until(self, is_last: Callable[[ParsedSignedNotification], bool],
+                                     timeout: float) -> List[ParsedSignedNotification]:
+        """Collects every Signed notification, in arrival order, up to and including the
+        first one for which `is_last` is True. Used for multi-chunk responses (e.g.
+        PROPERTIES_LIST.../PROPERTIES_LIST_END) where `_wait_for_signed`'s single-slot
+        `_last_signed` cache would silently drop chunks that arrive back-to-back before the
+        awaiting coroutine gets to look at each one."""
+        queue: "asyncio.Queue[ParsedSignedNotification]" = asyncio.Queue()
+        self._extra_signed_queues.append(queue)
+        try:
+            async def _loop():
+                collected: List[ParsedSignedNotification] = []
+                while True:
+                    notif = await queue.get()
+                    collected.append(notif)
+                    if is_last(notif):
+                        return collected
+            return await asyncio.wait_for(_loop(), timeout=timeout)
+        finally:
+            self._extra_signed_queues.remove(queue)
 
     async def _wait_for_encrypted_complete(self, timeout: float) -> None:
         """Waits for the EncryptedIO acknowledgement (SAL.BlueConnect.IO.Encrypted.EncryptedIO.ReadPackage):
@@ -134,7 +173,7 @@ class HoermannClient:
                 await asyncio.sleep(inter_chunk_delay)
 
     async def register(self, qr_text: str, device_address: str, timeout: float = 15.0) -> Credentials:
-        """One-time QR code registration (phase 1, reveng/ANALYSIS.md section 8).
+        """One-time QR code registration (phase 1).
         Assumes the drive is currently accepting a new registration
         (advertisement bit AdminsCanBeTeached=True, e.g. right after a reset
         via menu 19/parameter 02).
@@ -182,3 +221,94 @@ class HoermannClient:
         challenge = self._last_signed.challenge if self._last_signed else bytes(8)
         frame = build_switch_relais_frame(credentials.root_id, channel, credentials.root_key, challenge)
         await self._write_chunked(frame)
+
+    async def read_properties(self, credentials: Credentials, menu_groups: Optional[Sequence[int]] = None,
+                               timeout: float = 10.0) -> Dict[int, int]:
+        """Reads the drive's menu/parameter table (see hoermoles_ble.menu_settings for the
+        Supramatic E4 menu-number/wire-byte mapping). Without `menu_groups`, reads
+        everything (GET_PROPERTIES); with `menu_groups`, only those wire bytes are
+        requested (GET_SELECTED_PROPERTIES, batched into groups of <=4 - see
+        build_get_selected_properties_frame). Returns {menu_group: value}.
+
+        Live-verified against a real Supramatic E4 (both the unfiltered GET_PROPERTIES full
+        read and a single-menu GET_SELECTED_PROPERTIES read) - see protocol.py.
+        """
+        batches = [None] if menu_groups is None else batch_menu_groups_for_selected_properties(menu_groups)
+        results: Dict[int, int] = {}
+        for batch in batches:
+            challenge = self._last_signed.challenge if self._last_signed else bytes(8)
+            if batch is None:
+                frame = build_get_properties_frame(credentials.root_id, credentials.root_key, challenge)
+            else:
+                frame = build_get_selected_properties_frame(credentials.root_id, batch,
+                                                              credentials.root_key, challenge)
+            await self._write_chunked(frame)
+            notifications = await self._collect_signed_until(
+                lambda n: n.notif_type == NOTIF_PROPERTIES_LIST_END, timeout)
+            for notif in notifications:
+                if notif.properties:
+                    results.update(notif.properties)
+        return results
+
+    async def write_properties(self, credentials: Credentials, settings: Dict[int, int],
+                                timeout: float = 10.0) -> None:
+        """Writes menu/parameter values (see hoermoles_ble.menu_settings for the Supramatic
+        E4 menu-number/wire-byte mapping and valid values per menu). `settings` maps
+        {menu_group: value}. Batched into groups of <=4 settings per SET_PROPERTIES frame,
+        mirroring the official app (see build_set_properties_frame) - raises
+        PropertiesRejected if the drive answers a batch with PROPERTIES_INVALID.
+
+        Not yet verified live against real hardware (unlike open_channel/CHANNEL_1) - read
+        back the current value first and double-check the menu_group/value against the
+        printed operator manual before writing to real hardware.
+        """
+        items = list(settings.items())
+        for i in range(0, len(items), 4):
+            batch: List[Tuple[int, int]] = items[i:i + 4]
+            challenge = self._last_signed.challenge if self._last_signed else bytes(8)
+            frame = build_set_properties_frame(credentials.root_id, batch, credentials.root_key, challenge)
+            await self._write_chunked(frame)
+            notifications = await self._collect_signed_until(
+                lambda n: n.notif_type in (NOTIF_PROPERTY_ACCEPTED, NOTIF_PROPERTIES_INVALID), timeout)
+            if notifications and notifications[-1].notif_type == NOTIF_PROPERTIES_INVALID:
+                raise PropertiesRejected(f"Drive rejected property batch {batch}")
+
+    async def read_log(self, credentials: Credentials, timeout: float = 15.0) -> List[Tuple[int, int, bytes]]:
+        """Reads the drive's security/access audit log (GET_LOG) - see
+        hoermoles_ble.device_log for LogTag names, per-tag field decoding and timestamp
+        conversion. Returns a list of (log_tag, timestamp_raw, data) tuples, oldest or
+        newest first as the drive sends them (not reordered here).
+
+        Live-verified against a real Supramatic E4: correctly returned its two real log
+        entries (REGISTER_ROOT from the registration in this same session, then an
+        IMPULS_WITH_CLOCK from a channel toggle a few seconds later - both plausible and
+        matching the actual session timeline), newest first.
+        """
+        challenge = self._last_signed.challenge if self._last_signed else bytes(8)
+        frame = build_get_log_frame(credentials.root_id, credentials.root_key, challenge)
+        await self._write_chunked(frame)
+        notifications = await self._collect_signed_until(
+            lambda n: n.notif_type == NOTIF_LOG_END, timeout)
+        return [n.log_entry for n in notifications if n.log_entry is not None]
+
+    async def read_service_data(self, credentials: Credentials, timeout: float = 15.0) -> Dict[int, int]:
+        """Reads the drive's service/diagnostics counters (READ_SERVICE_DATA) - operating
+        hours, door cycles, maintenance counters, ... - see
+        hoermoles_ble.device_log.SERVICE_TYPE_NAMES. Returns {service_type: value}.
+
+        Live-verified against a real Supramatic E4: all 18 wire-byte counters (0-17, plus
+        one unmapped 18) came back with plausible values (e.g. operating hours=43,
+        complete door cycles=12) - also how a transcription error in SERVICE_TYPE_NAMES
+        (wire byte 17 mislabeled as "ENGINE_RUNTIME" instead of the correct
+        "ELEMENTS_COUNTER" mapping) was caught.
+        """
+        challenge = self._last_signed.challenge if self._last_signed else bytes(8)
+        frame = build_read_service_data_frame(credentials.root_id, credentials.root_key, challenge)
+        await self._write_chunked(frame)
+        notifications = await self._collect_signed_until(
+            lambda n: n.notif_type == NOTIF_SERVICE_DATA_END, timeout)
+        results: Dict[int, int] = {}
+        for notif in notifications:
+            if notif.service_data:
+                results.update(notif.service_data)
+        return results

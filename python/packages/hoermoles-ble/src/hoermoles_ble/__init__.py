@@ -1,15 +1,54 @@
 from .advertisement import AdvertisementInfo
-from .client import HoermannClient, RegistrationTimeout
+from .client import HoermannClient, PropertiesRejected, RegistrationTimeout
 from .config import ENV_VAR_CONFIG_DIR, resolve_config_dir
-from .credentials import Credentials
+from .credentials import Credentials, default_credentials_path
+from .device_log import (
+    LOG_TAG_NAMES,
+    SERVICE_TYPE_IS_TIMESTAMP,
+    SERVICE_TYPE_NAMES,
+    log_timestamp_to_datetime,
+    parse_log_fields,
+)
+from .devices import (
+    DeviceInfo,
+    default_devices_registry_path,
+    get_device_info,
+    list_device_infos,
+    load_device_registry,
+    save_device_info,
+)
 from .discovery import find_qr_for_address, scan_devices
-from .protocol import BC_RX, BC_SERVICE, BC_TX, CHANNEL_COMMAND_ID, GATE_ACTIONS, serial_no_from_qr_prefix
+from .menu_settings import (
+    DRIVE_MENU_TABLES,
+    SUPRAMATIC_E4_MENU_TABLE,
+    SUPRAMATIC_E4_PRODUCT_CLASS,
+    SUPRAMATIC_E4_PRODUCT_ID,
+    DriveMenuTable,
+    MenuParameter,
+    MenuSetting,
+    menu_setting_for_number,
+    menu_setting_for_wire_group,
+    menu_table_for_product,
+    menu_tables_for_product,
+    wire_group_for_menu_number,
+)
+from .protocol import (
+    BC_RX,
+    BC_SERVICE,
+    BC_TX,
+    CHANNEL_COMMAND_ID,
+    GATE_ACTIONS,
+    product_class_and_id_from_qr_prefix,
+    serial_no_from_qr_prefix,
+)
 from .qr_store import default_qr_store_path, known_qr_serial_map, load_known_qrs, save_qr
 
 __all__ = [
     "HoermannClient",
     "RegistrationTimeout",
+    "PropertiesRejected",
     "Credentials",
+    "default_credentials_path",
     "AdvertisementInfo",
     "scan_devices",
     "find_qr_for_address",
@@ -20,9 +59,33 @@ __all__ = [
     "default_qr_store_path",
     "known_qr_serial_map",
     "serial_no_from_qr_prefix",
+    "product_class_and_id_from_qr_prefix",
     "BC_SERVICE",
     "BC_TX",
     "BC_RX",
     "CHANNEL_COMMAND_ID",
     "GATE_ACTIONS",
+    "MenuSetting",
+    "MenuParameter",
+    "DriveMenuTable",
+    "DRIVE_MENU_TABLES",
+    "SUPRAMATIC_E4_MENU_TABLE",
+    "SUPRAMATIC_E4_PRODUCT_CLASS",
+    "SUPRAMATIC_E4_PRODUCT_ID",
+    "menu_setting_for_number",
+    "menu_setting_for_wire_group",
+    "wire_group_for_menu_number",
+    "menu_tables_for_product",
+    "menu_table_for_product",
+    "DeviceInfo",
+    "default_devices_registry_path",
+    "load_device_registry",
+    "list_device_infos",
+    "get_device_info",
+    "save_device_info",
+    "LOG_TAG_NAMES",
+    "SERVICE_TYPE_NAMES",
+    "SERVICE_TYPE_IS_TIMESTAMP",
+    "parse_log_fields",
+    "log_timestamp_to_datetime",
 ]

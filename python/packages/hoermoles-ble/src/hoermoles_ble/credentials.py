@@ -15,7 +15,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from .config import resolve_config_dir
 
@@ -23,6 +23,15 @@ from .config import resolve_config_dir
 def default_credentials_path(device_address: str, config_dir: Optional[Union[str, Path]] = None) -> Path:
     safe_address = device_address.replace(":", "-").upper()
     return resolve_config_dir(config_dir) / "credentials" / f"{safe_address}.json"
+
+
+def list_saved_credential_paths(config_dir: Optional[Union[str, Path]] = None) -> List[Path]:
+    """All saved credential files under <config_dir>/credentials/, sorted by
+    filename (i.e. by MAC address) for a deterministic order."""
+    credentials_dir = resolve_config_dir(config_dir) / "credentials"
+    if not credentials_dir.is_dir():
+        return []
+    return sorted(credentials_dir.glob("*.json"))
 
 
 @dataclass
@@ -48,6 +57,19 @@ class Credentials:
     def load_for_device(cls, device_address: str, config_dir: Optional[Union[str, Path]] = None) -> "Credentials":
         """Loads from the default path (resolved via config_dir/ENV/.env/default)."""
         return cls.load(default_credentials_path(device_address, config_dir))
+
+    @classmethod
+    def load_first(cls, config_dir: Optional[Union[str, Path]] = None) -> "Credentials":
+        """Loads whichever saved credentials file sorts first by filename/MAC address -
+        convenience for single-drive setups where passing --address every time is
+        unnecessary. Raises FileNotFoundError if no credentials are saved at all."""
+        paths = list_saved_credential_paths(config_dir)
+        if not paths:
+            raise FileNotFoundError(
+                f"No saved credentials under {resolve_config_dir(config_dir) / 'credentials'} "
+                "- register a device first, or pass --address/--key-file."
+            )
+        return cls.load(paths[0])
 
     def save(self, path: Optional[Union[str, Path]] = None,
              config_dir: Optional[Union[str, Path]] = None) -> Path:

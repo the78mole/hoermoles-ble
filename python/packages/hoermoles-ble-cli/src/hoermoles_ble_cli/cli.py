@@ -21,6 +21,11 @@ Examples (after `uv sync` in the workspace root python/):
   uv run hoermoles-ble register --address F1:26:AF:CC:41:86
 
   uv run hoermoles-ble exec --address F1:26:AF:CC:41:86 open
+
+  uv run hoermoles-ble menu-get --address F1:26:AF:CC:41:86 52
+  uv run hoermoles-ble menu-set --address F1:26:AF:CC:41:86 52=1
+
+  uv run hoermoles-ble view-log --address F1:26:AF:CC:41:86
 """
 import argparse
 import asyncio
@@ -28,15 +33,34 @@ import time
 
 from hoermoles_ble import (
     Credentials,
+    DeviceInfo,
+    DriveMenuTable,
     HoermannClient,
+    LOG_TAG_NAMES,
+    PropertiesRejected,
     RegistrationTimeout,
     GATE_ACTIONS,
+    SERVICE_TYPE_IS_TIMESTAMP,
+    SERVICE_TYPE_NAMES,
+    default_credentials_path,
+    get_device_info,
+    list_device_infos,
+    log_timestamp_to_datetime,
+    menu_setting_for_wire_group,
+    menu_table_for_product,
+    parse_log_fields,
+    product_class_and_id_from_qr_prefix,
+    save_device_info,
     scan_devices,
     find_qr_for_address,
     save_qr,
     known_qr_serial_map,
+    serial_no_from_qr_prefix,
+    wire_group_for_menu_number,
 )
+from hoermoles_ble.advertisement import PRODUCT_TYPE_NAMES
 from hoermoles_ble.ble_transport import BleakTransport
+from hoermoles_ble.protocol import parse_qr_code
 
 
 def log(msg: str) -> None:
@@ -53,6 +77,10 @@ async def cmd_scan(args) -> None:
         return
     for info in devices:
         print(f"\n{info.address}  (RSSI {info.rssi} dBm)")
+        if info.product_class is not None:
+            device_info = DeviceInfo(info.address, info.product_class, info.product_id,
+                                      info.product_name, info.serial_no)
+            save_device_info(device_info, config_dir=args.config_dir)
         if info.product_name:
             print(f"  Product:                {info.product_name} "
                   f"(class={info.product_class}, id={info.product_id})")
@@ -119,14 +147,37 @@ async def cmd_register(args) -> None:
     saved_path = credentials.save(args.key_file, config_dir=args.config_dir)
     log(f"Saved to {saved_path}")
 
+    prefix, _ = parse_qr_code(qr_text)
+    product_info = product_class_and_id_from_qr_prefix(prefix)
+    if product_info is not None:
+        product_class, product_id = product_info
+        product_name = (PRODUCT_TYPE_NAMES.get((product_class, product_id))
+                         or PRODUCT_TYPE_NAMES.get((product_class, None)))
+        device_info = DeviceInfo(args.address, product_class, product_id,
+                                  product_name, serial_no_from_qr_prefix(prefix))
+        devices_path = save_device_info(device_info, config_dir=args.config_dir)
+        log(f"Product type: {product_name or 'unknown'} (class={product_class}, id={product_id}), "
+            f"saved to {devices_path}")
+    else:
+        log("Could not determine the product type from the QR code prefix (non-version-3 layout?) - "
+            "run 'scan' near the drive to detect it instead.")
+
+
+def _load_credentials(args) -> Credentials:
+    if args.key_file:
+        return Credentials.load(args.key_file)
+    if args.address:
+        return Credentials.load_for_device(args.address, config_dir=args.config_dir)
+    try:
+        credentials = Credentials.load_first(config_dir=args.config_dir)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
+    log(f"No --address given, using the only/first saved credentials: {credentials.device_address}")
+    return credentials
+
 
 async def cmd_exec(args) -> None:
-    if args.key_file:
-        credentials = Credentials.load(args.key_file)
-    elif args.address:
-        credentials = Credentials.load_for_device(args.address, config_dir=args.config_dir)
-    else:
-        raise SystemExit("Provide either --key-file or --address.")
+    credentials = _load_credentials(args)
     address = args.address or credentials.device_address
     channel = GATE_ACTIONS[args.action]
 
@@ -147,6 +198,148 @@ async def cmd_exec(args) -> None:
             pass
 
     log("Done.")
+
+
+def _menu_group_or_exit(table: DriveMenuTable, menu_number: int) -> int:
+    group = wire_group_for_menu_number(table.settings, menu_number)
+    if group is None:
+        raise SystemExit(
+            f"Menu {menu_number} isn't in the {table.product_name} menu table (hoermoles_ble.menu_settings)."
+        )
+    return group
+
+
+def _resolve_menu_table(args, credentials: Credentials) -> DriveMenuTable:
+    """Figures out which hoermoles_ble.menu_settings.DriveMenuTable applies to this drive
+    from the device registry (see 'scan'/'register'/list-devices - a plain 'scan' near the
+    drive is enough, no credentials/pairing needed for that part)."""
+    device_info = get_device_info(credentials.device_address, config_dir=args.config_dir)
+    if device_info is None:
+        raise SystemExit(
+            f"No stored product type for {credentials.device_address} - run 'scan' near the "
+            "drive first (that's all it takes, no re-registration needed), then retry."
+        )
+    table = menu_table_for_product(device_info.product_class, device_info.product_id)
+    if table is None:
+        raise SystemExit(
+            f"No menu table known for {device_info.product_name or 'this product'} "
+            f"(class={device_info.product_class}, id={device_info.product_id})."
+        )
+    return table
+
+
+async def cmd_menu_get(args) -> None:
+    credentials = _load_credentials(args)
+    address = args.address or credentials.device_address
+    table = _resolve_menu_table(args, credentials)
+    menu_numbers = [int(n) for n in args.menu_numbers] or None
+    menu_groups = [_menu_group_or_exit(table, n) for n in menu_numbers] if menu_numbers else None
+
+    async with HoermannClient(BleakTransport(address, adapter=args.adapter, on_log=log), on_log=log) as client:
+        log(f"Connected to {address}, waiting for the initial notification (challenge)...")
+        try:
+            await client.wait_for_any_notification(timeout=10.0)
+        except asyncio.TimeoutError:
+            log("WARNING: no initial notification, challenge may be stale")
+
+        log(f"Reading properties from {table.product_name} (this can take a while for the full table)...")
+        values = await client.read_properties(credentials, menu_groups=menu_groups, timeout=20.0)
+
+    for menu_group, value in sorted(values.items()):
+        setting = menu_setting_for_wire_group(table.settings, menu_group)
+        if setting is None:
+            print(f"[wire group {menu_group}, not in the {table.product_name} table] = {value}")
+            continue
+        parameter = next((p for p in setting.parameters if p.value == value), None)
+        text = f" ({parameter.text})" if parameter else ""
+        label = setting.label_en or setting.label
+        print(f"menu {setting.menu_number:>3} {label}: {value}{text}")
+
+
+async def cmd_menu_set(args) -> None:
+    credentials = _load_credentials(args)
+    address = args.address or credentials.device_address
+    table = _resolve_menu_table(args, credentials)
+
+    settings = {}
+    for item in args.settings:
+        menu_str, sep, value_str = item.partition("=")
+        if not sep:
+            raise SystemExit(f"Expected <menu_number>=<value>, got '{item}'")
+        settings[_menu_group_or_exit(table, int(menu_str))] = int(value_str)
+
+    async with HoermannClient(BleakTransport(address, adapter=args.adapter, on_log=log), on_log=log) as client:
+        log(f"Connected to {address}, waiting for the initial notification (challenge)...")
+        try:
+            await client.wait_for_any_notification(timeout=10.0)
+        except asyncio.TimeoutError:
+            log("WARNING: no initial notification, challenge may be stale")
+
+        log(f"Writing {len(settings)} setting(s) to {table.product_name}...")
+        try:
+            await client.write_properties(credentials, settings, timeout=20.0)
+        except PropertiesRejected as exc:
+            log(f"ERROR: {exc}")
+            raise SystemExit(1)
+
+    log("Done.")
+
+
+async def cmd_list_devices(args) -> None:
+    """Lists every drive we know the product type of (from 'scan' and/or 'register') -
+    'registered' below means we also hold credentials for it (see 'register'), not just
+    that we've seen its advertisement."""
+    infos = list_device_infos(config_dir=args.config_dir)
+    if not infos:
+        print("No known drives yet - run 'scan' near a drive first.")
+        return
+    for info in infos:
+        serial = f"  serial={info.serial_no}" if info.serial_no is not None else ""
+        registered = "registered" if default_credentials_path(info.device_address, args.config_dir).exists() \
+            else "not registered (no credentials)"
+        print(f"{info.device_address}  {info.product_name or '?'} "
+              f"(class={info.product_class}, id={info.product_id}){serial}  [{registered}]")
+
+
+async def cmd_view_log(args) -> None:
+    credentials = _load_credentials(args)
+    address = args.address or credentials.device_address
+
+    async with HoermannClient(BleakTransport(address, adapter=args.adapter, on_log=log), on_log=log) as client:
+        log(f"Connected to {address}, waiting for the initial notification (challenge)...")
+        try:
+            await client.wait_for_any_notification(timeout=10.0)
+        except asyncio.TimeoutError:
+            log("WARNING: no initial notification, challenge may be stale")
+
+        log("Reading service/diagnostics counters...")
+        service_data = await client.read_service_data(credentials, timeout=20.0)
+
+        log("Reading audit log...")
+        log_entries = await client.read_log(credentials, timeout=20.0)
+
+    print("\n=== Service/diagnostics counters ===")
+    if not service_data:
+        print("(none)")
+    for service_type, value in sorted(service_data.items()):
+        name = SERVICE_TYPE_NAMES.get(service_type, f"unknown service type {service_type}")
+        if value == 0xFFFFFFFF:
+            print(f"{name}: undefined")
+        elif service_type in SERVICE_TYPE_IS_TIMESTAMP:
+            print(f"{name}: raw={value} (proprietary Hoermann timestamp encoding, not decoded)")
+        else:
+            print(f"{name}: {value}")
+
+    print("\n=== Audit log ===")
+    if not log_entries:
+        print("(none)")
+    for log_tag, timestamp_raw, data in log_entries:
+        tag_name = LOG_TAG_NAMES.get(log_tag, f"unknown log tag {log_tag}")
+        timestamp = log_timestamp_to_datetime(timestamp_raw)
+        fields = parse_log_fields(log_tag, data)
+        fields_str = ", ".join(f"{key}={value}" for key, value in fields.items())
+        suffix = f"  ({fields_str})" if fields_str else ""
+        print(f"{timestamp:%Y-%m-%d %H:%M:%S}  {tag_name}{suffix}")
 
 
 class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -199,7 +392,7 @@ def main() -> None:
         "exec", formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble exec --address <MAC> open|close|impulse|light|partial|ventilation",
         description="Trigger a named gate action (open, close, impulse, light, partial, ventilation).")
-    p_exec.add_argument("--address", default=None, help="BLE MAC address (also used to find the default credentials file)")
+    p_exec.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
     p_exec.add_argument("--key-file", default=None,
                          help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
     p_exec.add_argument("action", choices=list(GATE_ACTIONS), metavar="action",
@@ -208,6 +401,55 @@ def main() -> None:
                               "direction commands; 'light', 'partial' and 'ventilation' depend on "
                               "the device's configuration.")
     p_exec.set_defaults(func=cmd_exec)
+
+    p_menu_get = sub.add_parser(
+        "menu-get", formatter_class=_HelpFormatter,
+        help="uv run hoermoles-ble menu-get --address <MAC> [menu_number ...]",
+        description="Read operator menu/parameter settings - see hoermoles_ble.menu_settings for the "
+                     "known products (Supramatic E4 read-verified against real hardware; others are "
+                     "structurally derived, not yet verified). Without menu numbers, reads the entire "
+                     "table. Needs the product type in the device registry - run 'scan' near the drive "
+                     "first if 'list-devices' doesn't show it yet.")
+    p_menu_get.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
+    p_menu_get.add_argument("--key-file", default=None,
+                             help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
+    p_menu_get.add_argument("menu_numbers", nargs="*", metavar="menu_number",
+                             help="Menu number(s) to read (e.g. 25 52). Default: all known menus.")
+    p_menu_get.set_defaults(func=cmd_menu_get)
+
+    p_menu_set = sub.add_parser(
+        "menu-set", formatter_class=_HelpFormatter,
+        help="uv run hoermoles-ble menu-set --address <MAC> 25=1 52=0",
+        description="Write operator menu/parameter settings - see hoermoles_ble.menu_settings for the "
+                     "known products. Needs the product type in the device registry - run 'scan' near "
+                     "the drive first if 'list-devices' doesn't show it yet. NOT YET VERIFIED against "
+                     "real hardware for any product - read the current value first and double check "
+                     "against the printed manual.")
+    p_menu_set.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
+    p_menu_set.add_argument("--key-file", default=None,
+                             help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
+    p_menu_set.add_argument("settings", nargs="+", metavar="menu_number=value",
+                             help="One or more <menu_number>=<value> pairs, e.g. 25=1 52=0")
+    p_menu_set.set_defaults(func=cmd_menu_set)
+
+    p_list_devices = sub.add_parser(
+        "list-devices", formatter_class=_HelpFormatter,
+        help="uv run hoermoles-ble list-devices",
+        description="List every drive whose product type we know (from 'scan' and/or 'register') "
+                     "and whether we also hold credentials for it ('registered').")
+    p_list_devices.set_defaults(func=cmd_list_devices)
+
+    p_view_log = sub.add_parser(
+        "view-log", formatter_class=_HelpFormatter,
+        help="uv run hoermoles-ble view-log --address <MAC>",
+        description="Read the drive's security/access audit log (admin/user actions, "
+                     "blocked attempts, clock changes) and service/diagnostics counters "
+                     "(operating hours, door cycles, ...) - see hoermoles_ble.device_log. "
+                     "Live-verified against a real Supramatic E4.")
+    p_view_log.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
+    p_view_log.add_argument("--key-file", default=None,
+                             help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
+    p_view_log.set_defaults(func=cmd_view_log)
 
     args = ap.parse_args()
     asyncio.run(args.func(args))
