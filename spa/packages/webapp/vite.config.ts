@@ -2,10 +2,15 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// GitHub Pages project site: the app lives under /<repo>/, so every asset URL
-// and the service worker scope have to be prefixed. Overridable for local
-// preview and for anyone hosting it at a domain root.
-const base = process.env.HOERMOLES_BASE ?? '/hoermoles-ble/';
+// GitHub Pages project site. The app deliberately lives in an `app/`
+// subdirectory rather than at the site root, leaving `/hoermoles-ble/` free for
+// other generated content (documentation, and whatever comes later) - see
+// `pages/` and the site-assembly step in spa-deploy.yml.
+//
+// Every asset URL, the manifest's start_url/scope and the service worker scope
+// derive from this, so it must match wherever the site is actually served from.
+// Overridable for local preview and for anyone hosting the app at a domain root.
+const base = process.env.HOERMOLES_BASE ?? '/hoermoles-ble/app/';
 
 /**
  * Content-Security-Policy, injected here rather than hardcoded in index.html

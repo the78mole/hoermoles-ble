@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hoermoles</title>
+
+    <!--
+      The site root. The web app itself is deployed to /app/ so this level stays
+      free for further content - documentation is the next thing planned. Add it
+      as a sibling directory here (pages/docs/, or a generator writing into
+      _site/docs/ in spa-deploy.yml) and link it from the list below.
+
+      Deliberately a hand-written static page: it exists so the repository's
+      Pages URL is not a 404, and it should not grow a build step of its own.
+    -->
+
+    <style>
+      :root {
+        color-scheme: dark light;
+        --bg: #101a24;
+        --surface: #1b2733;
+        --border: #33475c;
+        --text: #eef4fa;
+        --muted: #9fb3c8;
+        --accent: #4aa8ff;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #eef2f6;
+          --surface: #fff;
+          --border: #cbd6e2;
+          --text: #14212e;
+          --muted: #5a6b7d;
+          --accent: #0b6bcb;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.55;
+      }
+      main {
+        max-width: 34rem;
+      }
+      img {
+        width: 6rem;
+        border-radius: 1.25rem;
+        margin-bottom: 1rem;
+      }
+      h1 {
+        margin: 0 0 0.25rem;
+      }
+      p.lead {
+        color: var(--muted);
+        margin-top: 0;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 2rem 0 0;
+      }
+      li + li {
+        margin-top: 0.75rem;
+      }
+      a.card {
+        display: block;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        background: var(--surface);
+        color: inherit;
+        text-decoration: none;
+      }
+      a.card:hover {
+        border-color: var(--accent);
+      }
+      a.card strong {
+        color: var(--accent);
+      }
+      a.card span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer {
+        margin-top: 2rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      footer a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="app/icon-192.png" alt="" width="192" height="192" />
+      <h1>Hoermoles</h1>
+      <p class="lead">
+        Independent control of Hörmann garage door drives using the BlueSecur BLE "Signed"
+        protocol - without the vendor app and without the cloud.
+      </p>
+
+      <ul>
+        <li>
+          <a class="card" href="app/">
+            <strong>Open the web app &rarr;</strong>
+            <span>
+              Control a drive over Web Bluetooth. Installable to the home screen and fully
+              offline-capable. Needs Chrome or Edge - Safari and Firefox have no Web Bluetooth.
+            </span>
+          </a>
+        </li>
+        <li>
+          <a class="card" href="https://github.com/the78mole/hoermoles-ble">
+            <strong>Source, CLI and protocol notes &rarr;</strong>
+            <span>
+              The Python library and CLI, the reverse-engineered protocol documentation, and how
+              to move credentials between them and the web app.
+            </span>
+          </a>
+        </li>
+      </ul>
+
+      <footer>
+        MIT licensed. Not affiliated with, endorsed by, or supported by Hörmann.
+        <a href="https://github.com/the78mole/hoermoles-ble">github.com/the78mole/hoermoles-ble</a>
+      </footer>
+    </main>
+  </body>
+</html>

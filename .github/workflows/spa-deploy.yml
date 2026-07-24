@@ -21,6 +21,7 @@ on:
     paths:
       - 'spa/**'
       - 'shared/**'
+      - 'pages/**'  # the site root the app is grafted into - see "Assemble the site"
       - '.github/workflows/spa-test.yml'
       - '.github/workflows/spa-deploy.yml'
   workflow_dispatch:
@@ -98,16 +99,30 @@ jobs:
       run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version --workspaces --include-workspace-root || true
 
     - name: Build
-      # base must match the Pages project-site path; vite.config.ts defaults to
-      # it, this makes the dependency explicit rather than implicit.
+      # The app is served from /<repo>/app/, not the site root - see the
+      # site-assembly step below and the comment in vite.config.ts. This must
+      # match the directory the app ends up in, or every asset URL 404s.
       env:
-        HOERMOLES_BASE: /${{ github.event.repository.name }}/
+        HOERMOLES_BASE: /${{ github.event.repository.name }}/app/
       run: npm run build
+
+    - name: Assemble the site
+      # The published site is the repository's `pages/` directory with the built
+      # app grafted in at `app/`. Keeping the root free is deliberate: further
+      # content (documentation) gets its own sibling directory here rather than
+      # having to coexist with the app's asset tree and service worker scope.
+      working-directory: ${{ github.workspace }}
+      run: |
+        mkdir -p _site
+        cp -r pages/. _site/
+        cp -r spa/packages/webapp/dist _site/app
+        echo "Site contents:"
+        find _site -maxdepth 2 -printf '%P\n' | sort
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v5.0.0
       with:
-        path: spa/packages/webapp/dist
+        path: _site
 
   deploy:
     name: Deploy to GitHub Pages

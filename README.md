@@ -5,12 +5,17 @@
 [![Release](https://github.com/the78mole/hoermoles-ble/actions/workflows/pypi-publish.yml/badge.svg)](https://github.com/the78mole/hoermoles-ble/actions/workflows/pypi-publish.yml)
 [![Tests](https://github.com/the78mole/hoermoles-ble/actions/workflows/test.yml/badge.svg)](https://github.com/the78mole/hoermoles-ble/actions/workflows/test.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/the78mole/42b377cb18c21fa8d1cfee3fc3bc3605/raw/hoermoles-ble-coverage.json)](https://github.com/the78mole/hoermoles-ble/actions/workflows/test.yml)
-[![Web app](https://github.com/the78mole/hoermoles-ble/actions/workflows/spa-deploy.yml/badge.svg)](https://the78mole.github.io/hoermoles-ble/)
+[![Web app](https://github.com/the78mole/hoermoles-ble/actions/workflows/spa-deploy.yml/badge.svg)](https://the78mole.github.io/hoermoles-ble/app/)
 [![SPA Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/the78mole/42b377cb18c21fa8d1cfee3fc3bc3605/raw/hoermoles-spa-coverage.json)](https://github.com/the78mole/hoermoles-ble/actions/workflows/spa-test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Renovate](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com)
+
+[![Open the web app](https://img.shields.io/badge/%F0%9F%9A%AA%20Open%20the%20web%20app-the78mole.github.io%2Fhoermoles--ble%2Fapp-4aa8ff?style=for-the-badge)](https://the78mole.github.io/hoermoles-ble/app/)
+
+*Needs Chrome or Edge (Android, Windows, macOS, ChromeOS) - Safari and Firefox have no Web
+Bluetooth, so iOS cannot control a drive. See [Web app](#web-app).*
 
 Independent control of Hoermann garage door drives that use the BlueSecur BLE
 "Signed" protocol, without relying on the official app/cloud.
@@ -27,6 +32,10 @@ Independent control of Hoermann garage door drives that use the BlueSecur BLE
 - `shared/` - **generated** language-neutral artifacts consumed by both sides
   (`test-vectors.json`, `menu-tables.json`) plus the app artwork. Do not edit by
   hand; see [Shared artifacts](#shared-artifacts).
+- `pages/` - the published site's root. The deploy copies this to the top level
+  and grafts the built app in at `app/`, so further content (documentation) can
+  be added here as a sibling without colliding with the app's asset tree or its
+  service worker scope. `make site` assembles the same layout locally.
 
 `python/packages/hoermoles-ble/src/hoermoles_ble/protocol.py` remains the
 dependency-free reference implementation - further ports to other languages
@@ -46,7 +55,7 @@ with `uv run` - see `python/README.md`.
 
 ### Web app
 
-<https://the78mole.github.io/hoermoles-ble/> - installable to the home screen
+<https://the78mole.github.io/hoermoles-ble/app/> - installable to the home screen
 and fully offline-capable after the first load.
 
 **Browser support is the limiting factor, not the app.** Web Bluetooth is
@@ -109,7 +118,7 @@ forgotten regeneration is a red build rather than a silently stale port.
 ## Development
 
 ```bash
-make dev      # web app dev server on http://localhost:5173/hoermoles-ble/
+make dev      # web app dev server on http://localhost:5173/hoermoles-ble/app/
 make build    # the static site exactly as GitHub Pages receives it
 make test     # every test suite: pytest and vitest
 make help     # everything else (lint, format, typecheck, shared, icons, preview, clean)

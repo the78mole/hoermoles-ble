@@ -25,3 +25,7 @@ coverage/
 # Exported credential bundles contain root keys - a stray one must never be
 # committed. See hoermoles_ble.bundle.
 *hoermoles-credentials*.json
+
+# Assembled GitHub Pages site (make site / make preview)
+_site/
+.preview/
