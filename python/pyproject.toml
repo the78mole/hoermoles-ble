@@ -1,6 +1,17 @@
 [tool.uv.workspace]
 members = ["packages/*"]
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["packages/*/tests"]
+
 [tool.ruff]
 line-length = 120
 # menu_settings.py is intentionally one data literal per line (one MenuSetting

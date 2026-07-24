@@ -79,6 +79,12 @@ Reverse-engineered from the official Hoermann BlueSecur app; see the module
 docstrings in `protocol.py`, `client.py`, and `advertisement.py` for details
 on where each part of the protocol comes from.
 
+Unit-tested in `tests/` (`uv run pytest` from the workspace root `python/`) -
+the pure protocol/crypto/config logic directly, `client.py` against an
+in-memory fake transport. See the [workspace README](../../README.md#testing)
+for details; this package's live-hardware verification notes above are the
+complement to that, not a replacement.
+
 ## Operator menu/parameter settings
 
 Besides the channel commands (open/close/light/...), the drive also exposes

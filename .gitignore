@@ -6,6 +6,9 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+.coverage
+coverage.xml
+.pytest_cache/
 
 # Local configuration (incl. HOERMOLES_CONF_DIR for development)
 .env

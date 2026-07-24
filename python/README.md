@@ -29,6 +29,22 @@ cd python
 uv sync
 ```
 
+## Testing
+
+```bash
+cd python
+uv run pytest                                                    # run the suite
+uv run pytest --cov --cov-report=term-missing --cov-fail-under=80  # with coverage
+```
+
+Tests live under `packages/<name>/tests/`, mirroring `src/`. The protocol/crypto/
+config/registry logic in `hoermoles-ble` is unit-tested directly; `client.py`
+(the async BLE client) is tested against an in-memory fake transport instead of
+real hardware. Real I/O boundaries (`ble_transport.py`, `discovery.py`, and the
+CLI's `argparse`/BLE command handlers) are intentionally not covered here - see
+`packages/hoermoles-ble/README.md` for how those are validated against a real
+drive instead. CI runs the suite on every push/PR (`.github/workflows/test.yml`).
+
 ## Configuration
 
 Credentials and saved QR codes are stored under a config directory, resolved

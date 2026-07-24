@@ -12,6 +12,11 @@ name: Create Release and Publish to PyPI
 # This filename must match the "Workflow" field configured in PyPI's Trusted
 # Publisher settings for both the hoermoles-ble and hoermoles-ble-cli projects.
 #
+# Exception: the `test` job below DOES call out to test.yml via workflow_call -
+# that's fine, since test.yml never touches the PyPI publish step (no OIDC
+# token involved there at all), only the version/build/publish jobs must stay
+# physically in this file.
+#
 # Tags are prefixed "python/v..." (not just "v...") since this is a monorepo -
 # other components (e.g. a future SPA) will get their own "<component>/v..."
 # tag namespace and semantic-version calculation, independent of this one.
@@ -36,8 +41,14 @@ on:
           - none
 
 jobs:
+  test:
+    name: Run tests (gate for tagging/release)
+    uses: ./.github/workflows/test.yml
+    secrets: inherit  # so test.yml's coverage-badge Gist step can see GIST_SECRET
+
   version:
     name: Calculate Version
+    needs: [test]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.semver.outputs.version }}

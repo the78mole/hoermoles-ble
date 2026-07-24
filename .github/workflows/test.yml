@@ -1,0 +1,75 @@
+name: Tests
+
+on:
+  pull_request:
+    paths:
+      - 'python/**'
+      - '.github/workflows/test.yml'
+  workflow_call:  # so pypi-publish.yml can gate tagging/release on tests passing first
+
+jobs:
+  test:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v9.0.0
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      working-directory: python
+      run: uv sync --all-packages
+
+    - name: Run tests with coverage
+      working-directory: python
+      run: uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-report=json --cov-fail-under=80
+
+    - name: Coverage summary
+      if: always()
+      working-directory: python
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🧪 Test coverage (Python ${{ matrix.python-version }})
+        \`\`\`
+        $(uv run coverage report)
+        \`\`\`
+        EOF
+
+    # Coverage badge via a Gist + shields.io dynamic badge (no file committed
+    # into the repo itself - see the discussion that ruled out a committed
+    # coverage.svg). Only extracted/pushed once (one matrix leg) and only for
+    # a real push to main (via pypi-publish.yml's workflow_call, not from a
+    # pull_request). One-time manual setup needed before this works (Daniel):
+    # 1. Create a public Gist with one file "hoermoles-ble-coverage.json"
+    #    (any placeholder content, e.g. "{}") - note its ID from the URL.
+    # 2. Create a GitHub PAT (classic) with the "gist" scope.
+    # 3. Save it as a repo secret named GIST_SECRET.
+    # 4. Replace the <GIST_ID> placeholder below, and the GIST_ID placeholder
+    #    in the README badge URL, with the real Gist ID from step 1.
+    - name: Extract coverage percentage
+      if: matrix.python-version == '3.12'
+      id: coverage
+      working-directory: python
+      run: |
+        percentage=$(jq -r '.totals.percent_covered_display' coverage.json)
+        echo "percentage=$percentage" >> "$GITHUB_OUTPUT"
+
+    - name: Update coverage badge Gist
+      if: matrix.python-version == '3.12' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 42b377cb18c21fa8d1cfee3fc3bc3605  # TODO: replace with the target Gist's ID - see setup notes above
+        filename: hoermoles-ble-coverage.json
+        label: Coverage
+        message: ${{ steps.coverage.outputs.percentage }}%
+        valColorRange: ${{ steps.coverage.outputs.percentage }}
+        minColorRange: 50
+        maxColorRange: 100
