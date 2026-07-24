@@ -16,6 +16,7 @@ import {
   exportRootKey,
   listCredentials,
   saveCredential,
+  updateCredentialLabel,
   type BundleEntry,
   type DriveCredentials,
   type StoredCredential,
@@ -39,6 +40,12 @@ export function displayName(record: StoredCredential): string {
   return record.label ?? record.productName ?? record.deviceAddress;
 }
 
+/** Sets or clears the user-facing name of a drive and refreshes the list. */
+export async function renameDrive(deviceAddress: string, label: string): Promise<void> {
+  await updateCredentialLabel(deviceAddress, label);
+  await refreshDrives();
+}
+
 /**
  * Imports a bundle from any of its forms.
  *
@@ -60,6 +67,7 @@ export async function importBundle(
           deviceAddress: entry.deviceAddress,
           rootId: entry.rootId,
           rootKey: entry.rootKey,
+          label: entry.label ?? undefined,
           qrPrefix: entry.qrPrefix,
           productClass: entry.productClass,
           productId: entry.productId,
@@ -84,6 +92,7 @@ async function toBundleEntry(record: StoredCredential): Promise<BundleEntry> {
     deviceAddress: record.deviceAddress,
     rootId: record.rootId,
     rootKey,
+    label: record.label,
     qrPrefix: record.qrPrefix ?? '',
     createdUnix: record.createdUnix,
     productClass: record.productClass,

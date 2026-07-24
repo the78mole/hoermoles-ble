@@ -87,6 +87,12 @@ class BundleEntry:
             "qr_prefix": self.credentials.qr_prefix,
             "created_unix": self.credentials.created_unix,
         }
+        # A user-chosen display name. Top-level (not under the product block), to
+        # mirror the TypeScript port's flat layout and so it round-trips even
+        # when the product type is unknown. On this side the value lives in
+        # DeviceInfo.label, so it is only present once a drive has a DeviceInfo.
+        if self.device_info is not None and self.device_info.label:
+            entry["label"] = self.device_info.label
         if self.device_info is not None:
             entry["product_class"] = self.device_info.product_class
             entry["product_id"] = self.device_info.product_id
@@ -121,7 +127,12 @@ class BundleEntry:
                 # Accepts the legacy JSON-number form too, so a bundle written
                 # before the string change still imports.
                 serial_no=None if serial_no is None else int(serial_no),
+                label=entry.get("label"),
             )
+        # A label without any product info (theoretically possible from the web
+        # app, though a registered drive always has product info) has nowhere to
+        # be stored on this side - DeviceInfo requires a product - so it is
+        # dropped rather than fabricating a placeholder product type.
         return cls(credentials=credentials, device_info=device_info)
 
 

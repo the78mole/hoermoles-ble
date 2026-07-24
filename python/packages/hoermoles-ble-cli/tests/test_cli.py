@@ -102,7 +102,7 @@ def test_resolve_menu_table_exits_when_product_unknown(tmp_path):
 # --- export / import -------------------------------------------------------
 
 
-def _seed_drive(tmp_path, address="F1:26:AF:CC:41:86", root_id=1, with_device_info=True):
+def _seed_drive(tmp_path, address="F1:26:AF:CC:41:86", root_id=1, with_device_info=True, label=None):
     Credentials(device_address=address, root_id=root_id, root_key=bytes(range(32))).save(config_dir=tmp_path)
     if with_device_info:
         devices.save_device_info(
@@ -112,6 +112,7 @@ def _seed_drive(tmp_path, address="F1:26:AF:CC:41:86", root_id=1, with_device_in
                 product_id=2,
                 product_name="Supramatic Serie 4",
                 serial_no=302626026414510307,
+                label=label,
             ),
             config_dir=tmp_path,
         )
@@ -194,6 +195,20 @@ def test_export_stdout_piped_into_import(tmp_path, capsys):
 
     asyncio.run(cmd_import(SimpleNamespace(source=piped, config_dir=target, force=False)))
     assert Credentials.load_for_device("F1:26:AF:CC:41:86", config_dir=target).root_id == 1
+
+
+def test_label_survives_export_import_through_the_cli(tmp_path, capsys):
+    """A name set in the web app must survive a round trip through the CLI: it
+    rides in the bundle and is persisted to the target's devices.json."""
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    _seed_drive(source, label="Garage links")
+
+    asyncio.run(cmd_export(_export_args(source)))
+    bundle_text = _bundle_line(capsys, "HMOLES1:")
+
+    asyncio.run(cmd_import(SimpleNamespace(source=bundle_text, config_dir=target, force=False)))
+    assert devices.get_device_info("F1:26:AF:CC:41:86", config_dir=target).label == "Garage links"
 
 
 def test_export_import_round_trip_via_json_file(tmp_path):

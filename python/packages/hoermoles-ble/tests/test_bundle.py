@@ -22,7 +22,7 @@ ROOT_KEY = bytes(range(32))
 QR_PREFIX = "03" + "02" + "02" + "000" + "00302626026414510307" + "99"
 
 
-def make_entry(with_device_info: bool = True) -> BundleEntry:
+def make_entry(with_device_info: bool = True, label: str | None = None) -> BundleEntry:
     credentials = Credentials(
         device_address="F1:26:AF:CC:41:86",
         root_id=1,
@@ -37,6 +37,7 @@ def make_entry(with_device_info: bool = True) -> BundleEntry:
             product_id=2,
             product_name="Supramatic Serie 4",
             serial_no=302626026414510307,
+            label=label,
         )
         if with_device_info
         else None
@@ -96,6 +97,23 @@ def test_decode_accepts_a_full_import_url():
     url = f"https://the78mole.github.io/hoermoles-ble/#import={text}"
     [restored] = decode_bundle(url)
     assert restored.credentials.root_key == ROOT_KEY
+
+
+def test_label_round_trips_when_set():
+    [restored] = decode_bundle(encode_bundle([make_entry(label="Garage")]))
+    assert restored.device_info is not None
+    assert restored.device_info.label == "Garage"
+
+
+def test_label_absent_when_not_set():
+    """An unnamed drive must not carry an empty 'label' key - keeps bundles clean
+    and matches the TypeScript side, which only emits a label when there is one."""
+    payload = json.loads(bundle_to_json([make_entry()]))
+    assert "label" not in payload["devices"][0]
+
+    [restored] = decode_bundle(encode_bundle([make_entry()]))
+    assert restored.device_info is not None
+    assert restored.device_info.label is None
 
 
 def test_serial_number_is_carried_as_a_string():

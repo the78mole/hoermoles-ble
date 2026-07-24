@@ -43,6 +43,9 @@ export interface BundleEntry {
   rootKey: Uint8Array;
   qrPrefix: string;
   createdUnix: number;
+  /** User-chosen display name. Carried independently of the product metadata so
+   * a renamed drive survives export/import, including through the CLI. */
+  label?: string | null;
   productClass?: number;
   productId?: number;
   productName?: string | null;
@@ -56,6 +59,7 @@ interface RawEntry {
   root_key_hex: string;
   qr_prefix?: string;
   created_unix?: number;
+  label?: string | null;
   product_class?: number;
   product_id?: number;
   product_name?: string | null;
@@ -77,6 +81,8 @@ function toRaw(entry: BundleEntry): RawEntry {
     qr_prefix: entry.qrPrefix ?? '',
     created_unix: entry.createdUnix ?? 0,
   };
+  // Only emit a label when there is one, so unnamed drives keep clean bundles.
+  if (entry.label) raw.label = entry.label;
   if (entry.productClass !== undefined && entry.productId !== undefined) {
     raw.product_class = entry.productClass;
     raw.product_id = entry.productId;
@@ -111,6 +117,7 @@ function fromRaw(raw: RawEntry): BundleEntry {
     qrPrefix: raw.qr_prefix ?? '',
     createdUnix: Number(raw.created_unix ?? 0),
   };
+  if (typeof raw.label === 'string' && raw.label !== '') entry.label = raw.label;
   if (raw.product_class != null && raw.product_id != null) {
     entry.productClass = Number(raw.product_class);
     entry.productId = Number(raw.product_id);

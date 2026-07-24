@@ -56,6 +56,28 @@ body {
     env(safe-area-inset-left);
 }
 
+/* Artwork laid faintly over the theme colour - present in the page margins and
+   between cards, but never covering the dark/light background it sits on. The
+   --page-bg-image URL is set from JS (main.ts) so it resolves under the deploy
+   base; opacity is tuned per theme since the artwork reads brighter on light. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--page-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.07;
+}
+
+@media (prefers-color-scheme: light) {
+  body::before {
+    opacity: 0.05;
+  }
+}
+
 #app {
   max-width: 40rem;
   margin: 0 auto;

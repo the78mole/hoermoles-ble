@@ -21,6 +21,7 @@ import {
   listCredentials,
   requestPersistentStorage,
   saveCredential,
+  updateCredentialLabel,
 } from '../src/store.js';
 
 const ROOT_KEY = new Uint8Array(32).fill(0x5a);
@@ -133,6 +134,36 @@ describe('key extractability - the security property', () => {
   it('stores a label when given one', async () => {
     const record = await saveCredential(entry(), { label: 'Garage' });
     expect(record.label).toBe('Garage');
+  });
+});
+
+describe('renaming', () => {
+  it('sets the label without disturbing the (non-extractable) key', async () => {
+    await saveCredential(entry());
+    await updateCredentialLabel('AA:BB:CC:DD:EE:FF', '  Garage left  ');
+
+    const record = await getCredential('AA:BB:CC:DD:EE:FF');
+    expect(record!.label).toBe('Garage left'); // trimmed
+    expect(record!.key.extractable).toBe(false); // key untouched
+    // Still usable for signing after the rename.
+    const sig = await crypto.subtle.sign('HMAC', record!.key, new Uint8Array([1]));
+    expect(sig.byteLength).toBe(32);
+  });
+
+  it('clears the label when given an empty or whitespace name', async () => {
+    await saveCredential(entry(), { label: 'Garage' });
+    await updateCredentialLabel('AA:BB:CC:DD:EE:FF', '   ');
+    expect((await getCredential('AA:BB:CC:DD:EE:FF'))!.label).toBeUndefined();
+  });
+
+  it('is a no-op for an unknown drive', async () => {
+    await expect(updateCredentialLabel('11:22:33:44:55:66', 'x')).resolves.toBeUndefined();
+  });
+
+  it('is case-insensitive on the address', async () => {
+    await saveCredential(entry('aa:bb:cc:dd:ee:ff'));
+    await updateCredentialLabel('aa:bb:cc:dd:ee:ff', 'Garage');
+    expect((await getCredential('AA:BB:CC:DD:EE:FF'))!.label).toBe('Garage');
   });
 });
 

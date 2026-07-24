@@ -35,6 +35,12 @@ class DeviceInfo:
     product_id: int
     product_name: str | None = None
     serial_no: int | None = None
+    # User-chosen display name, set in the web app and carried through the
+    # bundle format (see hoermoles_ble.bundle). The CLI has no way to set it, but
+    # persists it here so a web-app name survives a round trip through 'import'
+    # and back out via 'export'. product_name is the model ("Supramatic Serie
+    # 4"); label is whatever the user called this particular drive ("Garage").
+    label: str | None = None
     updated_unix: int = 0
 
 
@@ -52,6 +58,7 @@ def load_device_registry(config_dir: str | Path | None = None) -> dict[str, Devi
             product_id=entry["product_id"],
             product_name=entry.get("product_name"),
             serial_no=entry.get("serial_no"),
+            label=entry.get("label"),
             updated_unix=entry.get("updated_unix", 0),
         )
         for address, entry in raw.items()

@@ -489,16 +489,17 @@
       "root_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
       "qr_prefix": "0302020000030262602641451030799",
       "created_unix": 1784850177,
+      "label": "Garage",
       "product_class": 2,
       "product_id": 2,
       "product_name": "Supramatic Serie 4",
       "serial_no": "302626026414510307"
     },
-    "plain_text": "HMOLES1:eyJmb3JtYXQiOiJob2VybW9sZXMtY3JlZGVudGlhbHMiLCJ2IjoxLCJkZXZpY2VzIjpbeyJkZXZpY2VfYWRkcmVzcyI6IkYxOjI2OkFGOkNDOjQxOjg2Iiwicm9vdF9pZCI6MSwicm9vdF9rZXlfaGV4IjoiMDAwMTAyMDMwNDA1MDYwNzA4MDkwYTBiMGMwZDBlMGYxMDExMTIxMzE0MTUxNjE3MTgxOTFhMWIxYzFkMWUxZiIsInFyX3ByZWZpeCI6IjAzMDIwMjAwMDAwMzAyNjI2MDI2NDE0NTEwMzA3OTkiLCJjcmVhdGVkX3VuaXgiOjE3ODQ4NTAxNzcsInByb2R1Y3RfY2xhc3MiOjIsInByb2R1Y3RfaWQiOjIsInByb2R1Y3RfbmFtZSI6IlN1cHJhbWF0aWMgU2VyaWUgNCIsInNlcmlhbF9ubyI6IjMwMjYyNjAyNjQxNDUxMDMwNyJ9XX0",
-    "json_file": "{\n  \"format\": \"hoermoles-credentials\",\n  \"v\": 1,\n  \"devices\": [\n    {\n      \"device_address\": \"F1:26:AF:CC:41:86\",\n      \"root_id\": 1,\n      \"root_key_hex\": \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\",\n      \"qr_prefix\": \"0302020000030262602641451030799\",\n      \"created_unix\": 1784850177,\n      \"product_class\": 2,\n      \"product_id\": 2,\n      \"product_name\": \"Supramatic Serie 4\",\n      \"serial_no\": \"302626026414510307\"\n    }\n  ]\n}\n",
+    "plain_text": "HMOLES1:eyJmb3JtYXQiOiJob2VybW9sZXMtY3JlZGVudGlhbHMiLCJ2IjoxLCJkZXZpY2VzIjpbeyJkZXZpY2VfYWRkcmVzcyI6IkYxOjI2OkFGOkNDOjQxOjg2Iiwicm9vdF9pZCI6MSwicm9vdF9rZXlfaGV4IjoiMDAwMTAyMDMwNDA1MDYwNzA4MDkwYTBiMGMwZDBlMGYxMDExMTIxMzE0MTUxNjE3MTgxOTFhMWIxYzFkMWUxZiIsInFyX3ByZWZpeCI6IjAzMDIwMjAwMDAwMzAyNjI2MDI2NDE0NTEwMzA3OTkiLCJjcmVhdGVkX3VuaXgiOjE3ODQ4NTAxNzcsImxhYmVsIjoiR2FyYWdlIiwicHJvZHVjdF9jbGFzcyI6MiwicHJvZHVjdF9pZCI6MiwicHJvZHVjdF9uYW1lIjoiU3VwcmFtYXRpYyBTZXJpZSA0Iiwic2VyaWFsX25vIjoiMzAyNjI2MDI2NDE0NTEwMzA3In1dfQ",
+    "json_file": "{\n  \"format\": \"hoermoles-credentials\",\n  \"v\": 1,\n  \"devices\": [\n    {\n      \"device_address\": \"F1:26:AF:CC:41:86\",\n      \"root_id\": 1,\n      \"root_key_hex\": \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\",\n      \"qr_prefix\": \"0302020000030262602641451030799\",\n      \"created_unix\": 1784850177,\n      \"label\": \"Garage\",\n      \"product_class\": 2,\n      \"product_id\": 2,\n      \"product_name\": \"Supramatic Serie 4\",\n      \"serial_no\": \"302626026414510307\"\n    }\n  ]\n}\n",
     "encrypted": {
       "passphrase": "correct horse battery staple",
-      "text": "HMOLES1E:SE0xRQABAgMEBQYHCAkKCwwNDg9kZWZnaGlqa2xtbm_xwuntzmaZEaPjP40cds61q_rQ9iBfRi-U0T-dGCaP_3uQLy1nYBLYni3XnPaISuEGaLVG8nZAxO9qx_CxAtdXdwUl35Kf0vhvIEPDf8fH3tXhSwONmQk2ANjRC9xNqs07ULNzt5XWzy-9sdcVjh6QUe_J5ezVrS0C6xNo3iqFJt1Sa9-vtsrzmP_ayeMZ5z_qA5JZ1CldA-YILrnEYZHWnfRTUbAj_b4mgGGzWWXSZ6L7zmG2uk9Z30_obyeAasMi3NkvkrOCmiO7k7RIQDq9BZgk9uH0D-kb_8OIQsNYQ58ijv8PZda5mUPKFhNV9bpeqeJFWw0j-lC64dtVk7NiTMYZZFBU0_3pFqL1Ik-S960PDzo8-xITM3Bodg1eDVk7xdCb74euTAXkmPubDX3cPnZhOl9HoF6DhOBW2C8C4cCyd0ZGl0jhjb4RZ1XmXu166j4gwejOoo-a8gkzuoRcKmWiSsXb1o1Cmny7UILLcIjRhh04I6Y"
+      "text": "HMOLES1E:SE0xRQABAgMEBQYHCAkKCwwNDg9kZWZnaGlqa2xtbm_xwuntzmaZEaPjP40cds61q_rQ9iBfRi-U0T-dGCaP_3uQLy1nYBLYni3XnPaISuEGaLVG8nZAxO9qx_CxAtdXdwUl35Kf0vhvIEPDf8fH3tXhSwONmQk2ANjRC9xNqs07ULNzt5XWzy-9sdcVjh6QUe_J5ezVrS0C6xNo3iqFJt1Sa9-vtsrzmP_ayeMZ5z_qA5JZ1CldA-YILrnEYZHWnfRTUbAj_b4mgGGzWWXSZ6L7zmG2uk9Z30_obyeAasMi3NkvkrOCmiO7k7RIQDq9BZgk9uH0D-kb_8OIQsNYQ58ijv8PZda5mUPKFhNV9bpeqeJFWw0j-lC64dtVk7NiUNUUZUkVnYDNG7HnNgiK6aNdDSc36gQEGExtc1wXHU8rmYCE-Z2pTTn-pv-aDX3MQSFhOlFOtEmeuK5k0DhJvsLVIBoWhUDykLYeGGjsDr49-Tow2_iL98_Fp1RY4dpOI3emWIqwmYuOYqKuPjXzYszytjtdYn4hWxPgEEqdpizHXHBG2Z-ZOQ"
     }
   }
 }

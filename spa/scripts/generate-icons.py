@@ -46,6 +46,7 @@ OUTPUT = SPA_DIR / "packages" / "webapp" / "public"
 
 ICON_SOURCE = ASSETS / "hoermoles_ble_icon_abstract_bt.jpeg"
 SPLASH_SOURCE = ASSETS / "hoermoles_ble_icon.jpeg"
+BACKGROUND_SOURCE = ASSETS / "hoermoles_ble_background.jpeg"
 
 # Fraction of the maskable icon the artwork may occupy. 0.8 is the safe zone
 # the Android adaptive-icon spec guarantees will not be cropped away.
@@ -79,7 +80,7 @@ def write_maskable_icon(source: Image.Image, size: int, target: Path) -> None:
 
 
 def main() -> int:
-    for path in (ICON_SOURCE, SPLASH_SOURCE):
+    for path in (ICON_SOURCE, SPLASH_SOURCE, BACKGROUND_SOURCE):
         if not path.exists():
             sys.exit(f"Missing source artwork: {path}")
 
@@ -99,6 +100,20 @@ def main() -> int:
     )
     print(
         f"wrote {splash_target.relative_to(SPA_DIR)} ({splash_target.stat().st_size:,} bytes)"
+    )
+
+    # The page background. It is laid over the theme at a low opacity in CSS, so
+    # a modest resolution and quality is plenty - it must not bloat the offline
+    # precache for something the eye barely registers. The image itself is stored
+    # at full colour; the fade happens in the stylesheet, not here, so the same
+    # asset works for both light and dark themes.
+    background = Image.open(BACKGROUND_SOURCE).convert("RGB")
+    background_target = OUTPUT / "background.webp"
+    background.resize((768, 768), Image.LANCZOS).save(
+        background_target, "WEBP", quality=70, method=6
+    )
+    print(
+        f"wrote {background_target.relative_to(SPA_DIR)} ({background_target.stat().st_size:,} bytes)"
     )
 
     return 0

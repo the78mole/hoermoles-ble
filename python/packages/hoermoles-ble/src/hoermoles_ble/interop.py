@@ -328,6 +328,7 @@ def _bundle_vectors() -> dict[str, Any]:
             product_id=2,
             product_name="Supramatic Serie 4",
             serial_no=302626026414510307,
+            label="Garage",
         ),
     )
     return {
@@ -337,6 +338,7 @@ def _bundle_vectors() -> dict[str, Any]:
             "root_key": bytes(range(32)).hex(),
             "qr_prefix": _QR_PREFIX,
             "created_unix": _TIMESTAMP,
+            "label": "Garage",
             "product_class": 2,
             "product_id": 2,
             "product_name": "Supramatic Serie 4",

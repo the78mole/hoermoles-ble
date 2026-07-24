@@ -134,6 +134,29 @@ export async function getCredential(deviceAddress: string): Promise<StoredCreden
   return record ?? null;
 }
 
+/**
+ * Renames a stored drive without re-importing its key.
+ *
+ * This is why rename is a store operation rather than a `saveCredential` with a
+ * new label: `saveCredential` needs the raw root key to import, which we
+ * deliberately do not keep for non-extractable credentials. Reading the record,
+ * changing one field and putting it back preserves the exact same `CryptoKey`
+ * (structured clone carries it), so a non-extractable key stays non-extractable.
+ * An empty or whitespace-only name clears the label.
+ */
+export async function updateCredentialLabel(deviceAddress: string, label: string): Promise<void> {
+  // Read and write in separate transactions on purpose: awaiting between a get
+  // and a put inside one transaction can let it auto-commit in the gap (an
+  // IndexedDB footgun - a transaction goes inactive once control returns to the
+  // event loop with no pending request). The store is single-user and local, so
+  // the read-then-write is not a meaningful race.
+  const record = await getCredential(deviceAddress);
+  if (!record) return;
+  const trimmed = label.trim();
+  record.label = trimmed === '' ? undefined : trimmed;
+  await withStore('readwrite', (store) => promisify(store.put(record)));
+}
+
 export async function deleteCredential(deviceAddress: string): Promise<void> {
   await withStore('readwrite', (store) => promisify(store.delete(deviceAddress.toUpperCase())));
 }

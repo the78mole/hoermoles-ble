@@ -31,6 +31,7 @@ interface BundleVectors {
     root_key: string;
     qr_prefix: string;
     created_unix: number;
+    label: string;
     product_class: number;
     product_id: number;
     product_name: string;
@@ -51,6 +52,7 @@ function expectMatchesVector(entry: BundleEntry): void {
   expect(toHex(entry.rootKey)).toBe(expected.root_key);
   expect(entry.qrPrefix).toBe(expected.qr_prefix);
   expect(entry.createdUnix).toBe(expected.created_unix);
+  expect(entry.label).toBe(expected.label);
   expect(entry.productClass).toBe(expected.product_class);
   expect(entry.productId).toBe(expected.product_id);
   expect(entry.productName).toBe(expected.product_name);
@@ -126,6 +128,18 @@ describe('local round trips', () => {
 
   it('encryption is randomized', async () => {
     expect(await encodeBundle([entry], 'pw')).not.toBe(await encodeBundle([entry], 'pw'));
+  });
+
+  it('round-trips a label when set, and omits it when not', async () => {
+    const named: BundleEntry = { ...entry, label: 'Garage' };
+    const [restored] = await decodeBundle(await encodeBundle([named]));
+    expect(restored.label).toBe('Garage');
+
+    // An unnamed drive must not carry an empty label key (matches bundle.py).
+    const raw = JSON.parse(bundleToJson([entry]));
+    expect('label' in raw.devices[0]).toBe(false);
+    const [plain] = await decodeBundle(await encodeBundle([entry]));
+    expect(plain.label).toBeUndefined();
   });
 
   it('text form is safe inside a URL fragment', async () => {

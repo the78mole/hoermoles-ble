@@ -73,7 +73,9 @@ export default defineConfig({
       // shell makes it genuinely offline-capable, which matters for a garage
       // that may have no signal.
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // webp covers the splash and the page background; without it those were
+        // silently left out of the offline precache.
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2}'],
         // menu-tables.json is ~250 kB; the default 2 MiB limit is fine but be
         // explicit so a future data file does not silently drop out of the cache.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
