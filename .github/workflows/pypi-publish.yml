@@ -66,7 +66,7 @@ jobs:
 
     - name: Calculate semantic version
       id: semver
-      uses: paulhatch/semantic-version@v6.0.2
+      uses: paulhatch/semantic-version@v6.0.3
       with:
         tag_prefix: "python/v"
         major_pattern: "/(feat|fix|refactor)!:/"
