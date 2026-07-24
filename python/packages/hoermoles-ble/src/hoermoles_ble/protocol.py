@@ -23,6 +23,7 @@ stripping this envelope does the Signed-specific format (challenge+type+payload)
 follow for ioId=1; for ioId=2 (Encrypted) the remainder is just a single status
 byte (see EncryptedIO.ReadPackage).
 """
+
 from __future__ import annotations
 
 import base64
@@ -30,8 +31,9 @@ import hashlib
 import hmac
 import struct
 import time
-from dataclasses import dataclass, field
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import ClassVar
 
 BC_SERVICE = "669a9001-0008-968f-e311-6050405558b3"
 BC_TX = "669a900c-0008-968f-e311-6050405558b3"
@@ -39,22 +41,22 @@ BC_RX = "669a900a-0008-968f-e311-6050405558b3"
 
 GATT_WRITE_CHUNK_SIZE = 20  # SAL.BlueConnect.IO.*.PAYLOAD_SIZE
 
-ROUTING_SIGNED = 0x01       # SAL.BlueConnect.IO.Signed        (everyday commands, HMAC)
-ROUTING_ENCRYPTED = 0x02    # SAL.BlueConnect.IO.Encrypted     (one-time registration, RSA)
+ROUTING_SIGNED = 0x01  # SAL.BlueConnect.IO.Signed        (everyday commands, HMAC)
+ROUTING_ENCRYPTED = 0x02  # SAL.BlueConnect.IO.Encrypted     (one-time registration, RSA)
 ROUTING_BLUECONTROL = 0x03  # SAL.BlueConnect.IO.BlueControl   (different device profile, unused here)
 
 # SAL.BlueConnect.IO.Signed.SignedNotificationType (excerpt, relevant to this module)
 NOTIF_GATE_STATE = 1
 NOTIF_ROOT_KEY = 2
 NOTIF_ENABLED = 4
-NOTIF_PROPERTIES_LIST = 16      # one chunk of menu/parameter settings (see PropertyListItem below)
+NOTIF_PROPERTIES_LIST = 16  # one chunk of menu/parameter settings (see PropertyListItem below)
 NOTIF_PROPERTIES_LIST_END = 17  # last chunk - may or may not carry data itself
-NOTIF_PROPERTY_ACCEPTED = 18    # ack for SET_PROPERTIES
-NOTIF_PROPERTIES_INVALID = 19   # nack for SET_PROPERTIES (e.g. out-of-range value)
-NOTIF_LOG = 6                   # one audit-log entry (see LogEntryNotification below)
-NOTIF_LOG_END = 7               # last chunk - may or may not carry an entry itself
-NOTIF_SERVICE_DATA = 27         # one chunk of service/diagnostics counters (see ServiceNotification below)
-NOTIF_SERVICE_DATA_END = 28     # last chunk - may or may not carry data itself
+NOTIF_PROPERTY_ACCEPTED = 18  # ack for SET_PROPERTIES
+NOTIF_PROPERTIES_INVALID = 19  # nack for SET_PROPERTIES (e.g. out-of-range value)
+NOTIF_LOG = 6  # one audit-log entry (see LogEntryNotification below)
+NOTIF_LOG_END = 7  # last chunk - may or may not carry an entry itself
+NOTIF_SERVICE_DATA = 27  # one chunk of service/diagnostics counters (see ServiceNotification below)
+NOTIF_SERVICE_DATA_END = 28  # last chunk - may or may not carry data itself
 
 # EncryptedIO.ReadPackage: first byte of the (envelope-stripped) payload
 ENCRYPTED_ACK_CONTINUE = 1
@@ -92,20 +94,20 @@ READ_SERVICE_DATA_COMMAND_ID = 0x0042
 # "light"/"partial"/"open"/"close"/"ventilation" are structurally derived from
 # the decompiled defaults table but not yet confirmed against real hardware.
 GATE_ACTIONS = {
-    "impulse": 1,      # ChannelCategory.Other - factory default, toggles open/stop/close
-    "light": 2,        # ChannelCategory.Light
-    "partial": 3,      # ChannelCategory.Partial (Teiloeffnung)
-    "open": 4,         # ChannelCategory.Open (Richtungswahl Tor-AUF)
-    "close": 5,        # ChannelCategory.Close (Richtungswahl Tor-ZU)
+    "impulse": 1,  # ChannelCategory.Other - factory default, toggles open/stop/close
+    "light": 2,  # ChannelCategory.Light
+    "partial": 3,  # ChannelCategory.Partial (Teiloeffnung)
+    "open": 4,  # ChannelCategory.Open (Richtungswahl Tor-AUF)
+    "close": 5,  # ChannelCategory.Close (Richtungswahl Tor-ZU)
     "ventilation": 6,  # ChannelCategory.VentilationPosition - not present on every model
 }
 
 # DeviceAction.REGISTER_ROOT = 65537 = 0x10001, lower 16-bit word
 REGISTER_ROOT_COMMAND_ID = 0x0001
 
-SIZE_SIGNATURE = 32   # SignedIOConstants.SIZE_SIGNATURE (HMAC-SHA256)
-SIZE_ROOT_KEY = 32    # SignedIOConstants.SIZE_ROOT_KEY
-SIZE_USER_NAME = 16   # SignedIOConstants.SIZE_USER_NAME
+SIZE_SIGNATURE = 32  # SignedIOConstants.SIZE_SIGNATURE (HMAC-SHA256)
+SIZE_ROOT_KEY = 32  # SignedIOConstants.SIZE_ROOT_KEY
+SIZE_USER_NAME = 16  # SignedIOConstants.SIZE_USER_NAME
 DEFAULT_REGISTER_USERNAME = "ArnoNym"  # SAL.BlueConnect.IO.Signed.SignedWriter.createCommand, hardcoded
 
 
@@ -122,7 +124,7 @@ def parse_qr_code(text: str) -> tuple[str, bytes]:
     return prefix, der
 
 
-def serial_no_from_qr_prefix(prefix: str) -> Optional[int]:
+def serial_no_from_qr_prefix(prefix: str) -> int | None:
     """Extracts the serial number from the QR code prefix - determined
     empirically and verified live against the BLE advertisement of the same
     device: prefix = 2-digit version + 7 digits
@@ -139,7 +141,7 @@ def serial_no_from_qr_prefix(prefix: str) -> Optional[int]:
     return int(prefix[9:29])
 
 
-def product_class_and_id_from_qr_prefix(prefix: str) -> Optional[Tuple[int, int]]:
+def product_class_and_id_from_qr_prefix(prefix: str) -> tuple[int, int] | None:
     """Extracts (product_class, product_id) from the QR code prefix - see
     SAL.BlueConnect.API.Devices.Register.RegisterDeviceData.ParseDataForVersion3
     (only version 3 reproduced here, like serial_no_from_qr_prefix above):
@@ -163,7 +165,7 @@ def xor_bytes(a: bytes, b: bytes) -> bytes:
 
 def chunk(data: bytes, size: int = GATT_WRITE_CHUNK_SIZE):
     for i in range(0, len(data), size):
-        yield data[i:i + size]
+        yield data[i : i + size]
 
 
 def build_registration_frame(rsa_encrypted_key: bytes) -> bytes:
@@ -178,8 +180,7 @@ def derive_root_key(register_key: bytes, device_wire_value: bytes) -> bytes:
     return xor_bytes(device_wire_value, register_key)
 
 
-def _build_signed_frame(root_id: int, command_id: int, payload: bytes,
-                         key: bytes, challenge: bytes) -> bytes:
+def _build_signed_frame(root_id: int, command_id: int, payload: bytes, key: bytes, challenge: bytes) -> bytes:
     """SAL.BlueConnect.IO.Signed.SignedCommandBase.Serialize, shared by every Signed-protocol
     command: [RootId(2 LE)][Command(2 LE)][Length incl. these 6 bytes(2 LE)][payload]
     [HMAC-SHA256(key, everything above ++ challenge)(32)], wrapped in the outer
@@ -192,8 +193,9 @@ def _build_signed_frame(root_id: int, command_id: int, payload: bytes,
     return bytes([ROUTING_SIGNED]) + struct.pack("<H", len(signed) + 3) + signed
 
 
-def build_register_root_frame(register_key: bytes, challenge: bytes,
-                               username: str = DEFAULT_REGISTER_USERNAME) -> bytes:
+def build_register_root_frame(
+    register_key: bytes, challenge: bytes, username: str = DEFAULT_REGISTER_USERNAME
+) -> bytes:
     """SAL.BlueConnect.IO.Signed.RegisterRootCmd (KeyType.REGISTER_KEY) + SignedCommandBase.Serialize.
 
     Second, necessary part of the registration (SAL.BlueConnect.API.Keys.KeyChain.RegisterRoot
@@ -219,15 +221,15 @@ class NotificationReassembler:
     next call.
     """
 
-    _VALID_IO_IDS = {ROUTING_SIGNED, ROUTING_ENCRYPTED, ROUTING_BLUECONTROL}
+    _VALID_IO_IDS: ClassVar[set[int]] = {ROUTING_SIGNED, ROUTING_ENCRYPTED, ROUTING_BLUECONTROL}
 
     def __init__(self) -> None:
-        self._io_id: Optional[int] = None
-        self._declared_length: Optional[int] = None
+        self._io_id: int | None = None
+        self._declared_length: int | None = None
         self._buffer = bytearray()
 
-    def feed(self, data: bytes) -> List[Tuple[int, bytes]]:
-        results: List[Tuple[int, bytes]] = []
+    def feed(self, data: bytes) -> list[tuple[int, bytes]]:
+        results: list[tuple[int, bytes]] = []
         pos = 0
         while pos < len(data):
             if self._io_id is None:
@@ -243,7 +245,7 @@ class NotificationReassembler:
             payload_size = self._declared_length - 3
             needed = payload_size - len(self._buffer)
             take = max(0, min(needed, len(data) - pos))
-            self._buffer.extend(data[pos:pos + take])
+            self._buffer.extend(data[pos : pos + take])
             pos += take
             if len(self._buffer) >= payload_size:
                 results.append((self._io_id, bytes(self._buffer)))
@@ -264,17 +266,18 @@ class ParsedSignedNotification:
     challenge (nonce for the next HMAC signature), then type (2 bytes) +
     reserved (2 bytes) + type-specific payload.
     """
+
     challenge: bytes
     notif_type: int
     payload: bytes
-    root_id: Optional[int] = None
-    root_key_wire: Optional[bytes] = None
-    properties: Optional[List[Tuple[int, int]]] = None
-    log_entry: Optional[Tuple[int, int, bytes]] = None
-    service_data: Optional[List[Tuple[int, int]]] = None
+    root_id: int | None = None
+    root_key_wire: bytes | None = None
+    properties: list[tuple[int, int]] | None = None
+    log_entry: tuple[int, int, bytes] | None = None
+    service_data: list[tuple[int, int]] | None = None
 
     @classmethod
-    def parse(cls, payload: bytes) -> "ParsedSignedNotification":
+    def parse(cls, payload: bytes) -> ParsedSignedNotification:
         if len(payload) < 12:
             raise ValueError(f"Signed payload too short ({len(payload)} bytes): {payload.hex()}")
         challenge = payload[0:8]
@@ -287,20 +290,28 @@ class ParsedSignedNotification:
         service_data = None
         if notif_type == NOTIF_ROOT_KEY and len(rest) >= 2 + SIZE_ROOT_KEY:
             root_id = struct.unpack_from("<H", rest, 0)[0]
-            root_key_wire = rest[2:2 + SIZE_ROOT_KEY]
+            root_key_wire = rest[2 : 2 + SIZE_ROOT_KEY]
         elif notif_type in (NOTIF_PROPERTIES_LIST, NOTIF_PROPERTIES_LIST_END):
             properties = parse_properties_list_payload(rest)
         elif notif_type in (NOTIF_LOG, NOTIF_LOG_END):
             log_entry = parse_log_entry_payload(rest)
         elif notif_type in (NOTIF_SERVICE_DATA, NOTIF_SERVICE_DATA_END):
             service_data = parse_service_data_payload(rest)
-        return cls(challenge=challenge, notif_type=notif_type, payload=rest,
-                   root_id=root_id, root_key_wire=root_key_wire, properties=properties,
-                   log_entry=log_entry, service_data=service_data)
+        return cls(
+            challenge=challenge,
+            notif_type=notif_type,
+            payload=rest,
+            root_id=root_id,
+            root_key_wire=root_key_wire,
+            properties=properties,
+            log_entry=log_entry,
+            service_data=service_data,
+        )
 
 
-def build_switch_relais_frame(root_id: int, channel: int, root_key: bytes, challenge: bytes,
-                               now: Optional[int] = None) -> bytes:
+def build_switch_relais_frame(
+    root_id: int, channel: int, root_key: bytes, challenge: bytes, now: int | None = None
+) -> bytes:
     """SAL.BlueConnect.IO.Signed.SwitchRelaisCmd + SignedCommandBase.Serialize,
     key type ROOT_KEY (payload = 8-byte Unix timestamp, no UserID/validity block).
 
@@ -329,8 +340,9 @@ def build_get_properties_frame(root_id: int, root_key: bytes, challenge: bytes) 
     return _build_signed_frame(root_id, GET_PROPERTIES_COMMAND_ID, b"", root_key, challenge)
 
 
-def build_get_selected_properties_frame(root_id: int, menu_groups: Sequence[int],
-                                         root_key: bytes, challenge: bytes) -> bytes:
+def build_get_selected_properties_frame(
+    root_id: int, menu_groups: Sequence[int], root_key: bytes, challenge: bytes
+) -> bytes:
     """SAL.BlueConnect.IO.Signed.GetSelectedPropertiesCmd: payload is just the raw list of
     requested menu-group bytes (see hoermoles_ble.menu_settings for the Supramatic E4
     menu-number/wire-byte table), no count prefix, padded with 0xFF up to a minimum of 4
@@ -349,19 +361,18 @@ def build_get_selected_properties_frame(root_id: int, menu_groups: Sequence[int]
     if not (1 <= len(menu_groups) <= 4):
         raise ValueError(f"menu_groups must have 1..4 entries per request, had {len(menu_groups)}")
     groups = list(menu_groups) + [0xFF] * (4 - len(menu_groups))
-    return _build_signed_frame(root_id, GET_SELECTED_PROPERTIES_COMMAND_ID, bytes(groups),
-                                root_key, challenge)
+    return _build_signed_frame(root_id, GET_SELECTED_PROPERTIES_COMMAND_ID, bytes(groups), root_key, challenge)
 
 
-def batch_menu_groups_for_selected_properties(menu_groups: Sequence[int]) -> List[List[int]]:
+def batch_menu_groups_for_selected_properties(menu_groups: Sequence[int]) -> list[list[int]]:
     """Splits menu groups into batches suitable for build_get_selected_properties_frame():
     SAL.BlueConnect.API.Devices.BaseBluetoothService.RefreshProperties sorts the requested
     groups ascending, then starts a new batch of at most 4 whenever crossing from a group
     < 100 to one >= 100. Required, not optional - see build_get_selected_properties_frame().
     """
     sorted_groups = sorted(menu_groups)
-    batches: List[List[int]] = []
-    current: List[int] = []
+    batches: list[list[int]] = []
+    current: list[int] = []
     for i, group in enumerate(sorted_groups):
         crosses_100 = i != 0 and group >= 100 and sorted_groups[i - 1] < 100
         if current and (len(current) % 4 == 0 or crosses_100):
@@ -373,8 +384,9 @@ def batch_menu_groups_for_selected_properties(menu_groups: Sequence[int]) -> Lis
     return batches
 
 
-def build_set_properties_frame(root_id: int, settings: Sequence[Tuple[int, int]],
-                                root_key: bytes, challenge: bytes) -> bytes:
+def build_set_properties_frame(
+    root_id: int, settings: Sequence[tuple[int, int]], root_key: bytes, challenge: bytes
+) -> bytes:
     """SAL.BlueConnect.IO.Signed.PropertyListCmd: [count(1)] + count * [menu_group(1),
     value(int16 LE, signed)]. `settings` is a sequence of (menu_group, value) pairs (see
     hoermoles_ble.menu_settings for the Supramatic E4 menu-number/wire-byte table and valid
@@ -395,7 +407,7 @@ def build_set_properties_frame(root_id: int, settings: Sequence[Tuple[int, int]]
     return _build_signed_frame(root_id, SET_PROPERTIES_COMMAND_ID, payload, root_key, challenge)
 
 
-def parse_properties_list_payload(payload: bytes) -> List[Tuple[int, int]]:
+def parse_properties_list_payload(payload: bytes) -> list[tuple[int, int]]:
     """SAL.BlueConnect.IO.Signed.reader.Notifications.PropertyListItem.ReadStream:
     [count(1)] + count * [menu_group(1), value(int16 LE, signed)]. Both PROPERTIES_LIST and
     PROPERTIES_LIST_END notifications use this same format - PROPERTIES_LIST_END may carry a
@@ -431,7 +443,7 @@ def build_read_service_data_frame(root_id: int, root_key: bytes, challenge: byte
     return _build_signed_frame(root_id, READ_SERVICE_DATA_COMMAND_ID, b"", root_key, challenge)
 
 
-def parse_log_entry_payload(payload: bytes) -> Optional[Tuple[int, int, bytes]]:
+def parse_log_entry_payload(payload: bytes) -> tuple[int, int, bytes] | None:
     """SAL.BlueConnect.IO.Signed.reader.Notifications.LogEntryNotification.ReadStream:
     [dataLength(1)][logTag(1)][timestamp(uint32 LE)][data(dataLength bytes)] - a single log
     entry per notification (unlike the properties/service-data list formats, which pack
@@ -444,11 +456,11 @@ def parse_log_entry_payload(payload: bytes) -> Optional[Tuple[int, int, bytes]]:
     data_length = payload[0]
     log_tag = payload[1]
     timestamp_raw = struct.unpack_from("<I", payload, 2)[0]
-    data = payload[6:6 + data_length]
+    data = payload[6 : 6 + data_length]
     return log_tag, timestamp_raw, data
 
 
-def parse_service_data_payload(payload: bytes) -> List[Tuple[int, int]]:
+def parse_service_data_payload(payload: bytes) -> list[tuple[int, int]]:
     """SAL.BlueConnect.IO.Signed.reader.Notifications.ServiceNotification.ReadStream:
     [count(1)] + count * [value(uint32 LE), serviceType(1)] - note the value/key order is
     swapped compared to parse_properties_list_payload(). Both SERVICE_DATA and

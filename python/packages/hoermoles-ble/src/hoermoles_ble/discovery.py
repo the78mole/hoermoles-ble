@@ -1,10 +1,10 @@
 """BLE scan for Hoermann BlueSecur drives - returns AdvertisementInfo objects, with no
 connection or root key needed (see advertisement.py)."""
+
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional, Union
 
 from bleak import BleakScanner
 
@@ -13,7 +13,7 @@ from .protocol import BC_SERVICE
 from .qr_store import known_qr_serial_map
 
 
-async def scan_devices(timeout: float = 8.0, adapter: Optional[str] = None) -> list[AdvertisementInfo]:
+async def scan_devices(timeout: float = 8.0, adapter: str | None = None) -> list[AdvertisementInfo]:
     """Scans for `timeout` seconds for devices advertising the BlueConnect
     service (669a9001-...), collecting all manufacturer-data payloads seen
     (Company ID 1972) for each device found - a single advertisement packet
@@ -48,9 +48,9 @@ async def scan_devices(timeout: float = 8.0, adapter: Optional[str] = None) -> l
 async def find_qr_for_address(
     address: str,
     timeout: float = 8.0,
-    adapter: Optional[str] = None,
-    config_dir: Optional[Union[str, Path]] = None,
-) -> Optional[str]:
+    adapter: str | None = None,
+    config_dir: str | Path | None = None,
+) -> str | None:
     """Scans for `address` and, if the serial number decoded from it
     (AdvertisementInfo.serial_no) matches one of the saved QR codes (see
     qr_store.known_qr_serial_map), returns that QR code's content. None if the

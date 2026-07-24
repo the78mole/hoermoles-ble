@@ -17,11 +17,11 @@ first) yields the byte sequence expected by the original parser -
 usually only sees one of the two packets; `scan_devices()` in discovery.py
 therefore collects over the entire scan window.
 """
+
 from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import Optional
 
 COMPANY_ID = 1972  # 0x07B4
 
@@ -34,7 +34,10 @@ PRODUCT_TYPE_NAMES = {
     (2, 17): "Rollmatic 2",
     (2, 33): "SilentDrive 2",
     (2, 49): "Supramatic 4 H4",
-    (3, 1): "ST560", (3, 2): "ST560", (3, 8): "ST560", (3, 40): "ST560",
+    (3, 1): "ST560",
+    (3, 2): "ST560",
+    (3, 8): "ST560",
+    (3, 40): "ST560",
     (3, 17): "ST560 Dockleveller",
     (3, 33): "ST545",
 }
@@ -64,33 +67,33 @@ class AdvertisementInfo:
     rssi: int
     raw_manufacturer_data: list[str]  # hex strings, as seen during the scan
 
-    product_class: Optional[int] = None
-    product_id: Optional[int] = None
-    product_name: Optional[str] = None
-    serial_no: Optional[int] = None
-    is_blue_secur: Optional[bool] = None
-    clock_time_set: Optional[bool] = None
-    protection_active: Optional[bool] = None
-    admin_teached: Optional[bool] = None
-    admins_can_be_teached: Optional[bool] = None
+    product_class: int | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    serial_no: int | None = None
+    is_blue_secur: bool | None = None
+    clock_time_set: bool | None = None
+    protection_active: bool | None = None
+    admin_teached: bool | None = None
+    admins_can_be_teached: bool | None = None
 
-    in_action: Optional[bool] = None
-    opening_time: Optional[bool] = None
-    warning_time: Optional[bool] = None
-    emergency_mode: Optional[bool] = None
-    low_battery: Optional[bool] = None
-    teached_control: Optional[bool] = None
-    vacation_mode: Optional[bool] = None
+    in_action: bool | None = None
+    opening_time: bool | None = None
+    warning_time: bool | None = None
+    emergency_mode: bool | None = None
+    low_battery: bool | None = None
+    teached_control: bool | None = None
+    vacation_mode: bool | None = None
 
-    relais1_open: Optional[bool] = None
-    relais2_open: Optional[bool] = None
-    opening_progress_percent: Optional[float] = None
-    maintenance_required: Optional[bool] = None
+    relais1_open: bool | None = None
+    relais2_open: bool | None = None
+    opening_progress_percent: float | None = None
+    maintenance_required: bool | None = None
 
-    parse_error: Optional[str] = None
+    parse_error: str | None = None
 
     @classmethod
-    def from_scan(cls, address: str, rssi: int, payloads: list[bytes]) -> "AdvertisementInfo":
+    def from_scan(cls, address: str, rssi: int, payloads: list[bytes]) -> AdvertisementInfo:
         info = cls(address=address, rssi=rssi, raw_manufacturer_data=[p.hex() for p in payloads])
         if not payloads:
             return info
@@ -101,9 +104,11 @@ class AdvertisementInfo:
             # and "enough bytes present" checks would pass, but the result would
             # be computed from the wrong bytes (e.g. all flags falsely False).
             # Better to honestly parse nothing than to fake a wrong result.
-            info.parse_error = (f"only {len(distinct)} distinct manufacturer-data packet(s) "
-                                 "seen, need at least 2 for full parsing - "
-                                 "scan longer (increase --timeout)")
+            info.parse_error = (
+                f"only {len(distinct)} distinct manufacturer-data packet(s) "
+                "seen, need at least 2 for full parsing - "
+                "scan longer (increase --timeout)"
+            )
             return info
         try:
             info._parse(combine_manufacturer_payloads(distinct))
@@ -119,12 +124,15 @@ class AdvertisementInfo:
         product_id, product_class = data[2], data[3]
         self.product_class = product_class
         self.product_id = product_id
-        self.product_name = (PRODUCT_TYPE_NAMES.get((product_class, product_id))
-                              or PRODUCT_TYPE_NAMES.get((product_class, None)))
+        self.product_name = PRODUCT_TYPE_NAMES.get((product_class, product_id)) or PRODUCT_TYPE_NAMES.get(
+            (product_class, None)
+        )
 
         if len(data) < 17:
-            self.parse_error = (f"only {len(data)} of the required >=17 bytes seen "
-                                 "(maybe not both advertisement packets were captured during the scan)")
+            self.parse_error = (
+                f"only {len(data)} of the required >=17 bytes seen "
+                "(maybe not both advertisement packets were captured during the scan)"
+            )
             return
 
         status_byte = data[4]

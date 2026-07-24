@@ -15,11 +15,11 @@ For development, a .env pointing HOERMOLES_CONF_DIR at a scratch directory
 outside the repo keeps test credentials separate from "real" ones under
 ~/.hoermoles.
 """
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional, Union
 
 from dotenv import load_dotenv
 
@@ -28,7 +28,7 @@ ENV_VAR_CONFIG_DIR = "HOERMOLES_CONF_DIR"
 _DEFAULT_CONFIG_DIR = Path.home() / ".hoermoles"
 
 
-def resolve_config_dir(override: Optional[Union[str, Path]] = None) -> Path:
+def resolve_config_dir(override: str | Path | None = None) -> Path:
     if override is not None:
         return Path(override).expanduser().resolve()
 

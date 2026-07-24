@@ -6,11 +6,12 @@ Everything a new caller (Home Assistant integration, custom script,
 fingerprint-reader bridge, ...) needs is this class plus a Credentials
 instance - no BLE or crypto details required.
 """
+
 from __future__ import annotations
 
 import asyncio
 import secrets
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
 
 from .credentials import Credentials
 from .crypto_rsa import load_device_public_key, rsa_pkcs1v15_encrypt
@@ -59,17 +60,17 @@ class PropertiesRejected(RuntimeError):
 
 
 class HoermannClient:
-    def __init__(self, transport: BleTransport, on_log: Optional[Callable[[str], None]] = None):
+    def __init__(self, transport: BleTransport, on_log: Callable[[str], None] | None = None):
         self._transport = transport
         self._on_log = on_log or (lambda msg: None)
         self._reassembler = NotificationReassembler()
-        self._last_signed: Optional[ParsedSignedNotification] = None
-        self._last_encrypted_ack: Optional[int] = None
+        self._last_signed: ParsedSignedNotification | None = None
+        self._last_encrypted_ack: int | None = None
         self._signed_event = asyncio.Event()
         self._encrypted_event = asyncio.Event()
-        self._extra_signed_queues: List["asyncio.Queue[ParsedSignedNotification]"] = []
+        self._extra_signed_queues: list[asyncio.Queue[ParsedSignedNotification]] = []
 
-    async def __aenter__(self) -> "HoermannClient":
+    async def __aenter__(self) -> HoermannClient:
         await self._transport.connect()
         await self._transport.start_notify(self._on_notify)
         return self
@@ -78,8 +79,7 @@ class HoermannClient:
         try:
             await self._transport.stop_notify()
         except Exception as exc:
-            self._on_log(f"WARNING: stop_notify failed during cleanup ({exc}), "
-                         "the connection was likely already gone")
+            self._on_log(f"WARNING: stop_notify failed during cleanup ({exc}), the connection was likely already gone")
         await self._transport.disconnect()
 
     def _on_notify(self, data: bytes) -> None:
@@ -91,8 +91,10 @@ class HoermannClient:
                 except ValueError as exc:
                     self._on_log(f"WARNING: {exc}")
                     continue
-                self._on_log(f"Signed notification type={notif.notif_type} "
-                             f"challenge={notif.challenge.hex()} payload={notif.payload.hex()}")
+                self._on_log(
+                    f"Signed notification type={notif.notif_type} "
+                    f"challenge={notif.challenge.hex()} payload={notif.payload.hex()}"
+                )
                 self._last_signed = notif
                 self._signed_event.set()
                 for queue in self._extra_signed_queues:
@@ -105,33 +107,38 @@ class HoermannClient:
             else:
                 self._on_log(f"Notification with unhandled io_id={io_id}: {payload.hex()}")
 
-    async def _wait_for_signed(self, predicate: Callable[[ParsedSignedNotification], bool],
-                                timeout: float) -> ParsedSignedNotification:
+    async def _wait_for_signed(
+        self, predicate: Callable[[ParsedSignedNotification], bool], timeout: float
+    ) -> ParsedSignedNotification:
         async def _loop():
             while True:
                 if self._last_signed is not None and predicate(self._last_signed):
                     return self._last_signed
                 self._signed_event.clear()
                 await self._signed_event.wait()
+
         return await asyncio.wait_for(_loop(), timeout=timeout)
 
-    async def _collect_signed_until(self, is_last: Callable[[ParsedSignedNotification], bool],
-                                     timeout: float) -> List[ParsedSignedNotification]:
+    async def _collect_signed_until(
+        self, is_last: Callable[[ParsedSignedNotification], bool], timeout: float
+    ) -> list[ParsedSignedNotification]:
         """Collects every Signed notification, in arrival order, up to and including the
         first one for which `is_last` is True. Used for multi-chunk responses (e.g.
         PROPERTIES_LIST.../PROPERTIES_LIST_END) where `_wait_for_signed`'s single-slot
         `_last_signed` cache would silently drop chunks that arrive back-to-back before the
         awaiting coroutine gets to look at each one."""
-        queue: "asyncio.Queue[ParsedSignedNotification]" = asyncio.Queue()
+        queue: asyncio.Queue[ParsedSignedNotification] = asyncio.Queue()
         self._extra_signed_queues.append(queue)
         try:
+
             async def _loop():
-                collected: List[ParsedSignedNotification] = []
+                collected: list[ParsedSignedNotification] = []
                 while True:
                     notif = await queue.get()
                     collected.append(notif)
                     if is_last(notif):
                         return collected
+
             return await asyncio.wait_for(_loop(), timeout=timeout)
         finally:
             self._extra_signed_queues.remove(queue)
@@ -139,6 +146,7 @@ class HoermannClient:
     async def _wait_for_encrypted_complete(self, timeout: float) -> None:
         """Waits for the EncryptedIO acknowledgement (SAL.BlueConnect.IO.Encrypted.EncryptedIO.ReadPackage):
         status byte 1=keep waiting (timer is restarted), 2=done/success, 3=error."""
+
         async def _loop():
             while True:
                 if self._last_encrypted_ack is not None:
@@ -147,13 +155,12 @@ class HoermannClient:
                     if status == ENCRYPTED_ACK_COMPLETE:
                         return
                     if status == ENCRYPTED_ACK_ERROR:
-                        raise RegistrationTimeout(
-                            "The drive acknowledged SET_REGISTER_KEY with an error status."
-                        )
+                        raise RegistrationTimeout("The drive acknowledged SET_REGISTER_KEY with an error status.")
                     if status == ENCRYPTED_ACK_CONTINUE:
                         continue  # keep waiting, as ReceivingState does via timer restart
                 self._encrypted_event.clear()
                 await self._encrypted_event.wait()
+
         await asyncio.wait_for(_loop(), timeout=timeout)
 
     async def wait_for_any_notification(self, timeout: float = 10.0) -> ParsedSignedNotification:
@@ -206,13 +213,10 @@ class HoermannClient:
         try:
             notif = await self._wait_for_signed(lambda n: n.notif_type == NOTIF_ROOT_KEY, timeout)
         except asyncio.TimeoutError as exc:
-            raise RegistrationTimeout(
-                "No ROOT_KEY notification received after REGISTER_ROOT."
-            ) from exc
+            raise RegistrationTimeout("No ROOT_KEY notification received after REGISTER_ROOT.") from exc
 
         root_key = derive_root_key(register_key, notif.root_key_wire)
-        return Credentials(device_address=device_address, root_id=notif.root_id,
-                            root_key=root_key, qr_prefix=prefix)
+        return Credentials(device_address=device_address, root_id=notif.root_id, root_key=root_key, qr_prefix=prefix)
 
     async def open_channel(self, credentials: Credentials, channel: int = 1) -> None:
         """Sends a signed channel command (phase 2, e.g. open/close the gate).
@@ -222,8 +226,9 @@ class HoermannClient:
         frame = build_switch_relais_frame(credentials.root_id, channel, credentials.root_key, challenge)
         await self._write_chunked(frame)
 
-    async def read_properties(self, credentials: Credentials, menu_groups: Optional[Sequence[int]] = None,
-                               timeout: float = 10.0) -> Dict[int, int]:
+    async def read_properties(
+        self, credentials: Credentials, menu_groups: Sequence[int] | None = None, timeout: float = 10.0
+    ) -> dict[int, int]:
         """Reads the drive's menu/parameter table (see hoermoles_ble.menu_settings for the
         Supramatic E4 menu-number/wire-byte mapping). Without `menu_groups`, reads
         everything (GET_PROPERTIES); with `menu_groups`, only those wire bytes are
@@ -234,24 +239,23 @@ class HoermannClient:
         read and a single-menu GET_SELECTED_PROPERTIES read) - see protocol.py.
         """
         batches = [None] if menu_groups is None else batch_menu_groups_for_selected_properties(menu_groups)
-        results: Dict[int, int] = {}
+        results: dict[int, int] = {}
         for batch in batches:
             challenge = self._last_signed.challenge if self._last_signed else bytes(8)
             if batch is None:
                 frame = build_get_properties_frame(credentials.root_id, credentials.root_key, challenge)
             else:
-                frame = build_get_selected_properties_frame(credentials.root_id, batch,
-                                                              credentials.root_key, challenge)
+                frame = build_get_selected_properties_frame(credentials.root_id, batch, credentials.root_key, challenge)
             await self._write_chunked(frame)
             notifications = await self._collect_signed_until(
-                lambda n: n.notif_type == NOTIF_PROPERTIES_LIST_END, timeout)
+                lambda n: n.notif_type == NOTIF_PROPERTIES_LIST_END, timeout
+            )
             for notif in notifications:
                 if notif.properties:
                     results.update(notif.properties)
         return results
 
-    async def write_properties(self, credentials: Credentials, settings: Dict[int, int],
-                                timeout: float = 10.0) -> None:
+    async def write_properties(self, credentials: Credentials, settings: dict[int, int], timeout: float = 10.0) -> None:
         """Writes menu/parameter values (see hoermoles_ble.menu_settings for the Supramatic
         E4 menu-number/wire-byte mapping and valid values per menu). `settings` maps
         {menu_group: value}. Batched into groups of <=4 settings per SET_PROPERTIES frame,
@@ -264,16 +268,17 @@ class HoermannClient:
         """
         items = list(settings.items())
         for i in range(0, len(items), 4):
-            batch: List[Tuple[int, int]] = items[i:i + 4]
+            batch: list[tuple[int, int]] = items[i : i + 4]
             challenge = self._last_signed.challenge if self._last_signed else bytes(8)
             frame = build_set_properties_frame(credentials.root_id, batch, credentials.root_key, challenge)
             await self._write_chunked(frame)
             notifications = await self._collect_signed_until(
-                lambda n: n.notif_type in (NOTIF_PROPERTY_ACCEPTED, NOTIF_PROPERTIES_INVALID), timeout)
+                lambda n: n.notif_type in (NOTIF_PROPERTY_ACCEPTED, NOTIF_PROPERTIES_INVALID), timeout
+            )
             if notifications and notifications[-1].notif_type == NOTIF_PROPERTIES_INVALID:
                 raise PropertiesRejected(f"Drive rejected property batch {batch}")
 
-    async def read_log(self, credentials: Credentials, timeout: float = 15.0) -> List[Tuple[int, int, bytes]]:
+    async def read_log(self, credentials: Credentials, timeout: float = 15.0) -> list[tuple[int, int, bytes]]:
         """Reads the drive's security/access audit log (GET_LOG) - see
         hoermoles_ble.device_log for LogTag names, per-tag field decoding and timestamp
         conversion. Returns a list of (log_tag, timestamp_raw, data) tuples, oldest or
@@ -287,11 +292,10 @@ class HoermannClient:
         challenge = self._last_signed.challenge if self._last_signed else bytes(8)
         frame = build_get_log_frame(credentials.root_id, credentials.root_key, challenge)
         await self._write_chunked(frame)
-        notifications = await self._collect_signed_until(
-            lambda n: n.notif_type == NOTIF_LOG_END, timeout)
+        notifications = await self._collect_signed_until(lambda n: n.notif_type == NOTIF_LOG_END, timeout)
         return [n.log_entry for n in notifications if n.log_entry is not None]
 
-    async def read_service_data(self, credentials: Credentials, timeout: float = 15.0) -> Dict[int, int]:
+    async def read_service_data(self, credentials: Credentials, timeout: float = 15.0) -> dict[int, int]:
         """Reads the drive's service/diagnostics counters (READ_SERVICE_DATA) - operating
         hours, door cycles, maintenance counters, ... - see
         hoermoles_ble.device_log.SERVICE_TYPE_NAMES. Returns {service_type: value}.
@@ -305,9 +309,8 @@ class HoermannClient:
         challenge = self._last_signed.challenge if self._last_signed else bytes(8)
         frame = build_read_service_data_frame(credentials.root_id, credentials.root_key, challenge)
         await self._write_chunked(frame)
-        notifications = await self._collect_signed_until(
-            lambda n: n.notif_type == NOTIF_SERVICE_DATA_END, timeout)
-        results: Dict[int, int] = {}
+        notifications = await self._collect_signed_until(lambda n: n.notif_type == NOTIF_SERVICE_DATA_END, timeout)
+        results: dict[int, int] = {}
         for notif in notifications:
             if notif.service_data:
                 results.update(notif.service_data)

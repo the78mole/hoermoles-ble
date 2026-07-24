@@ -27,23 +27,26 @@ Examples (after `uv sync` in the workspace root python/):
 
   uv run hoermoles-ble view-log --address F1:26:AF:CC:41:86
 """
+
 import argparse
 import asyncio
 import time
 
 from hoermoles_ble import (
+    GATE_ACTIONS,
+    LOG_TAG_NAMES,
+    SERVICE_TYPE_IS_TIMESTAMP,
+    SERVICE_TYPE_NAMES,
     Credentials,
     DeviceInfo,
     DriveMenuTable,
     HoermannClient,
-    LOG_TAG_NAMES,
     PropertiesRejected,
     RegistrationTimeout,
-    GATE_ACTIONS,
-    SERVICE_TYPE_IS_TIMESTAMP,
-    SERVICE_TYPE_NAMES,
     default_credentials_path,
+    find_qr_for_address,
     get_device_info,
+    known_qr_serial_map,
     list_device_infos,
     log_timestamp_to_datetime,
     menu_setting_for_wire_group,
@@ -51,10 +54,8 @@ from hoermoles_ble import (
     parse_log_fields,
     product_class_and_id_from_qr_prefix,
     save_device_info,
-    scan_devices,
-    find_qr_for_address,
     save_qr,
-    known_qr_serial_map,
+    scan_devices,
     serial_no_from_qr_prefix,
     wire_group_for_menu_number,
 )
@@ -78,12 +79,12 @@ async def cmd_scan(args) -> None:
     for info in devices:
         print(f"\n{info.address}  (RSSI {info.rssi} dBm)")
         if info.product_class is not None:
-            device_info = DeviceInfo(info.address, info.product_class, info.product_id,
-                                      info.product_name, info.serial_no)
+            device_info = DeviceInfo(
+                info.address, info.product_class, info.product_id, info.product_name, info.serial_no
+            )
             save_device_info(device_info, config_dir=args.config_dir)
         if info.product_name:
-            print(f"  Product:                {info.product_name} "
-                  f"(class={info.product_class}, id={info.product_id})")
+            print(f"  Product:                {info.product_name} (class={info.product_class}, id={info.product_id})")
         if info.serial_no is not None:
             qr_status = "yes" if info.serial_no in known else f"no (0 of {len(known)} known QR codes match)"
             print(f"  QR code known:          {qr_status}")
@@ -118,10 +119,13 @@ async def cmd_register(args) -> None:
         with open(args.qr_file, "r") as f:
             qr_text = f.read()
     else:
-        log(f"No --qr-file given, looking for a matching saved QR code for {args.address} "
-            f"(scanning for up to {args.timeout:.0f}s)...")
-        qr_text = await find_qr_for_address(args.address, timeout=args.timeout, adapter=args.adapter,
-                                             config_dir=args.config_dir)
+        log(
+            f"No --qr-file given, looking for a matching saved QR code for {args.address} "
+            f"(scanning for up to {args.timeout:.0f}s)..."
+        )
+        qr_text = await find_qr_for_address(
+            args.address, timeout=args.timeout, adapter=args.adapter, config_dir=args.config_dir
+        )
         if qr_text is None:
             raise SystemExit(
                 f"No saved QR code matches {args.address} (or the device wasn't found) - "
@@ -151,16 +155,22 @@ async def cmd_register(args) -> None:
     product_info = product_class_and_id_from_qr_prefix(prefix)
     if product_info is not None:
         product_class, product_id = product_info
-        product_name = (PRODUCT_TYPE_NAMES.get((product_class, product_id))
-                         or PRODUCT_TYPE_NAMES.get((product_class, None)))
-        device_info = DeviceInfo(args.address, product_class, product_id,
-                                  product_name, serial_no_from_qr_prefix(prefix))
+        product_name = PRODUCT_TYPE_NAMES.get((product_class, product_id)) or PRODUCT_TYPE_NAMES.get(
+            (product_class, None)
+        )
+        device_info = DeviceInfo(
+            args.address, product_class, product_id, product_name, serial_no_from_qr_prefix(prefix)
+        )
         devices_path = save_device_info(device_info, config_dir=args.config_dir)
-        log(f"Product type: {product_name or 'unknown'} (class={product_class}, id={product_id}), "
-            f"saved to {devices_path}")
+        log(
+            f"Product type: {product_name or 'unknown'} (class={product_class}, id={product_id}), "
+            f"saved to {devices_path}"
+        )
     else:
-        log("Could not determine the product type from the QR code prefix (non-version-3 layout?) - "
-            "run 'scan' near the drive to detect it instead.")
+        log(
+            "Could not determine the product type from the QR code prefix (non-version-3 layout?) - "
+            "run 'scan' near the drive to detect it instead."
+        )
 
 
 def _load_credentials(args) -> Credentials:
@@ -295,10 +305,15 @@ async def cmd_list_devices(args) -> None:
         return
     for info in infos:
         serial = f"  serial={info.serial_no}" if info.serial_no is not None else ""
-        registered = "registered" if default_credentials_path(info.device_address, args.config_dir).exists() \
+        registered = (
+            "registered"
+            if default_credentials_path(info.device_address, args.config_dir).exists()
             else "not registered (no credentials)"
-        print(f"{info.device_address}  {info.product_name or '?'} "
-              f"(class={info.product_class}, id={info.product_id}){serial}  [{registered}]")
+        )
+        print(
+            f"{info.device_address}  {info.product_name or '?'} "
+            f"(class={info.product_class}, id={info.product_id}){serial}  [{registered}]"
+        )
 
 
 async def cmd_view_log(args) -> None:
@@ -352,103 +367,169 @@ class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=_HelpFormatter)
-    ap.add_argument("--adapter", default=None,
-                     help="BlueZ adapter, e.g. hci1. Default: system default.")
-    ap.add_argument("--config-dir", default=None,
-                     help="Base directory for credentials. Priority: "
-                          "--config-dir > $HOERMOLES_CONF_DIR > .env > ~/.hoermoles")
+    ap.add_argument("--adapter", default=None, help="BlueZ adapter, e.g. hci1. Default: system default.")
+    ap.add_argument(
+        "--config-dir",
+        default=None,
+        help="Base directory for credentials. Priority: --config-dir > $HOERMOLES_CONF_DIR > .env > ~/.hoermoles",
+    )
     sub = ap.add_subparsers(dest="command", required=True, metavar="command")
 
     p_scan = sub.add_parser(
-        "scan", formatter_class=_HelpFormatter,
+        "scan",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble scan",
-        description="Scan for Hoermann BlueSecur drives (no key needed).")
+        description="Scan for Hoermann BlueSecur drives (no key needed).",
+    )
     p_scan.add_argument("--timeout", type=float, default=8.0, help="Scan duration in seconds (default: 8)")
     p_scan.set_defaults(func=cmd_scan)
 
     p_qr = sub.add_parser(
-        "save-qr", formatter_class=_HelpFormatter,
+        "save-qr",
+        formatter_class=_HelpFormatter,
         help='uv run hoermoles-ble save-qr "<QR code content>"',
-        description="Remember a QR code's content (for 'register'/'scan' without --qr-file).")
+        description="Remember a QR code's content (for 'register'/'scan' without --qr-file).",
+    )
     p_qr.add_argument("content", help="Full QR code content as text")
     p_qr.set_defaults(func=cmd_save_qr)
 
     p_reg = sub.add_parser(
-        "register", formatter_class=_HelpFormatter,
+        "register",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble register --address <MAC>",
-        description="Perform the one-time QR code registration.")
+        description="Perform the one-time QR code registration.",
+    )
     p_reg.add_argument("--address", required=True, help="BLE MAC address of the drive")
-    p_reg.add_argument("--qr-file", default=None,
-                        help="Text file containing the QR code content. Default: look up a matching "
-                             "saved QR code via scan (see save-qr)")
-    p_reg.add_argument("--timeout", type=float, default=8.0,
-                        help="Scan duration in seconds to find the matching QR code, "
-                             "only relevant without --qr-file (default: 8)")
-    p_reg.add_argument("--key-file", default=None,
-                        help="Target file for the credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
+    p_reg.add_argument(
+        "--qr-file",
+        default=None,
+        help="Text file containing the QR code content. Default: look up a matching "
+        "saved QR code via scan (see save-qr)",
+    )
+    p_reg.add_argument(
+        "--timeout",
+        type=float,
+        default=8.0,
+        help="Scan duration in seconds to find the matching QR code, only relevant without --qr-file (default: 8)",
+    )
+    p_reg.add_argument(
+        "--key-file",
+        default=None,
+        help="Target file for the credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json",
+    )
     p_reg.set_defaults(func=cmd_register)
 
     p_exec = sub.add_parser(
-        "exec", formatter_class=_HelpFormatter,
+        "exec",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble exec --address <MAC> open|close|impulse|light|partial|ventilation",
-        description="Trigger a named gate action (open, close, impulse, light, partial, ventilation).")
-    p_exec.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
-    p_exec.add_argument("--key-file", default=None,
-                         help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
-    p_exec.add_argument("action", choices=list(GATE_ACTIONS), metavar="action",
-                         help="One of: " + ", ".join(GATE_ACTIONS) + ". 'impulse' is the "
-                              "factory-default toggle (open/stop/close); 'open'/'close' are direct "
-                              "direction commands; 'light', 'partial' and 'ventilation' depend on "
-                              "the device's configuration.")
+        description="Trigger a named gate action (open, close, impulse, light, partial, ventilation).",
+    )
+    p_exec.add_argument(
+        "--address",
+        default=None,
+        help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials",
+    )
+    p_exec.add_argument(
+        "--key-file",
+        default=None,
+        help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json",
+    )
+    p_exec.add_argument(
+        "action",
+        choices=list(GATE_ACTIONS),
+        metavar="action",
+        help="One of: " + ", ".join(GATE_ACTIONS) + ". 'impulse' is the "
+        "factory-default toggle (open/stop/close); 'open'/'close' are direct "
+        "direction commands; 'light', 'partial' and 'ventilation' depend on "
+        "the device's configuration.",
+    )
     p_exec.set_defaults(func=cmd_exec)
 
     p_menu_get = sub.add_parser(
-        "menu-get", formatter_class=_HelpFormatter,
+        "menu-get",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble menu-get --address <MAC> [menu_number ...]",
         description="Read operator menu/parameter settings - see hoermoles_ble.menu_settings for the "
-                     "known products (Supramatic E4 read-verified against real hardware; others are "
-                     "structurally derived, not yet verified). Without menu numbers, reads the entire "
-                     "table. Needs the product type in the device registry - run 'scan' near the drive "
-                     "first if 'list-devices' doesn't show it yet.")
-    p_menu_get.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
-    p_menu_get.add_argument("--key-file", default=None,
-                             help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
-    p_menu_get.add_argument("menu_numbers", nargs="*", metavar="menu_number",
-                             help="Menu number(s) to read (e.g. 25 52). Default: all known menus.")
+        "known products (Supramatic E4 read-verified against real hardware; others are "
+        "structurally derived, not yet verified). Without menu numbers, reads the entire "
+        "table. Needs the product type in the device registry - run 'scan' near the drive "
+        "first if 'list-devices' doesn't show it yet.",
+    )
+    p_menu_get.add_argument(
+        "--address",
+        default=None,
+        help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials",
+    )
+    p_menu_get.add_argument(
+        "--key-file",
+        default=None,
+        help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json",
+    )
+    p_menu_get.add_argument(
+        "menu_numbers",
+        nargs="*",
+        metavar="menu_number",
+        help="Menu number(s) to read (e.g. 25 52). Default: all known menus.",
+    )
     p_menu_get.set_defaults(func=cmd_menu_get)
 
     p_menu_set = sub.add_parser(
-        "menu-set", formatter_class=_HelpFormatter,
+        "menu-set",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble menu-set --address <MAC> 25=1 52=0",
         description="Write operator menu/parameter settings - see hoermoles_ble.menu_settings for the "
-                     "known products. Needs the product type in the device registry - run 'scan' near "
-                     "the drive first if 'list-devices' doesn't show it yet. NOT YET VERIFIED against "
-                     "real hardware for any product - read the current value first and double check "
-                     "against the printed manual.")
-    p_menu_set.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
-    p_menu_set.add_argument("--key-file", default=None,
-                             help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
-    p_menu_set.add_argument("settings", nargs="+", metavar="menu_number=value",
-                             help="One or more <menu_number>=<value> pairs, e.g. 25=1 52=0")
+        "known products. Needs the product type in the device registry - run 'scan' near "
+        "the drive first if 'list-devices' doesn't show it yet. NOT YET VERIFIED against "
+        "real hardware for any product - read the current value first and double check "
+        "against the printed manual.",
+    )
+    p_menu_set.add_argument(
+        "--address",
+        default=None,
+        help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials",
+    )
+    p_menu_set.add_argument(
+        "--key-file",
+        default=None,
+        help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json",
+    )
+    p_menu_set.add_argument(
+        "settings",
+        nargs="+",
+        metavar="menu_number=value",
+        help="One or more <menu_number>=<value> pairs, e.g. 25=1 52=0",
+    )
     p_menu_set.set_defaults(func=cmd_menu_set)
 
     p_list_devices = sub.add_parser(
-        "list-devices", formatter_class=_HelpFormatter,
+        "list-devices",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble list-devices",
         description="List every drive whose product type we know (from 'scan' and/or 'register') "
-                     "and whether we also hold credentials for it ('registered').")
+        "and whether we also hold credentials for it ('registered').",
+    )
     p_list_devices.set_defaults(func=cmd_list_devices)
 
     p_view_log = sub.add_parser(
-        "view-log", formatter_class=_HelpFormatter,
+        "view-log",
+        formatter_class=_HelpFormatter,
         help="uv run hoermoles-ble view-log --address <MAC>",
         description="Read the drive's security/access audit log (admin/user actions, "
-                     "blocked attempts, clock changes) and service/diagnostics counters "
-                     "(operating hours, door cycles, ...) - see hoermoles_ble.device_log. "
-                     "Live-verified against a real Supramatic E4.")
-    p_view_log.add_argument("--address", default=None, help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials")
-    p_view_log.add_argument("--key-file", default=None,
-                             help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json")
+        "blocked attempts, clock changes) and service/diagnostics counters "
+        "(operating hours, door cycles, ...) - see hoermoles_ble.device_log. "
+        "Live-verified against a real Supramatic E4.",
+    )
+    p_view_log.add_argument(
+        "--address",
+        default=None,
+        help="BLE MAC address (also used to find the credentials file). Default: the only/first saved credentials",
+    )
+    p_view_log.add_argument(
+        "--key-file",
+        default=None,
+        help="File with saved credentials (JSON). Default: ~/.hoermoles/credentials/<address>.json",
+    )
     p_view_log.set_defaults(func=cmd_view_log)
 
     args = ap.parse_args()

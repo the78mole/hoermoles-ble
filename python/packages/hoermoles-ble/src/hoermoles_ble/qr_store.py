@@ -10,20 +10,20 @@ deduplicated by the embedded serial number (protocol.serial_no_from_qr_prefix) -
 saving the same device again replaces the existing line instead of duplicating
 it. QR codes without a recognizable serial number are simply appended.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 from .config import resolve_config_dir
 from .protocol import parse_qr_code, serial_no_from_qr_prefix
 
 
-def default_qr_store_path(config_dir: Optional[Union[str, Path]] = None) -> Path:
+def default_qr_store_path(config_dir: str | Path | None = None) -> Path:
     return resolve_config_dir(config_dir) / "qr_codes.txt"
 
 
-def load_known_qrs(config_dir: Optional[Union[str, Path]] = None) -> List[str]:
+def load_known_qrs(config_dir: str | Path | None = None) -> list[str]:
     """All saved QR code contents, one line per entry. Empty list if nothing
     has been saved yet."""
     target = default_qr_store_path(config_dir)
@@ -32,10 +32,10 @@ def load_known_qrs(config_dir: Optional[Union[str, Path]] = None) -> List[str]:
     return [line.strip() for line in target.read_text().splitlines() if line.strip()]
 
 
-def known_qr_serial_map(config_dir: Optional[Union[str, Path]] = None) -> Dict[int, str]:
+def known_qr_serial_map(config_dir: str | Path | None = None) -> dict[int, str]:
     """Serial number -> QR code content, for all entries with a recognizable
     prefix format. Entries without a decodable serial number are skipped."""
-    result: Dict[int, str] = {}
+    result: dict[int, str] = {}
     for content in load_known_qrs(config_dir):
         try:
             prefix, _ = parse_qr_code(content)
@@ -47,7 +47,7 @@ def known_qr_serial_map(config_dir: Optional[Union[str, Path]] = None) -> Dict[i
     return result
 
 
-def save_qr(content: str, config_dir: Optional[Union[str, Path]] = None) -> Path:
+def save_qr(content: str, config_dir: str | Path | None = None) -> Path:
     """Validates the QR code content (raises on an invalid format) and appends
     it to the list of known QR codes. If a QR code with the same serial number
     is already saved, it is replaced instead of duplicated. Returns the path

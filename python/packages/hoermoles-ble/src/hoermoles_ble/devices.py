@@ -13,18 +13,18 @@ single JSON file `<config_dir>/devices.json`, keyed by MAC address, is the
 "overarching config that lists all known drives" a Credentials-per-file
 layout can't give you on its own.
 """
+
 from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 from .config import resolve_config_dir
 
 
-def default_devices_registry_path(config_dir: Optional[Union[str, Path]] = None) -> Path:
+def default_devices_registry_path(config_dir: str | Path | None = None) -> Path:
     return resolve_config_dir(config_dir) / "devices.json"
 
 
@@ -33,12 +33,12 @@ class DeviceInfo:
     device_address: str
     product_class: int
     product_id: int
-    product_name: Optional[str] = None
-    serial_no: Optional[int] = None
+    product_name: str | None = None
+    serial_no: int | None = None
     updated_unix: int = 0
 
 
-def load_device_registry(config_dir: Optional[Union[str, Path]] = None) -> Dict[str, DeviceInfo]:
+def load_device_registry(config_dir: str | Path | None = None) -> dict[str, DeviceInfo]:
     """All known drives, keyed by MAC address (uppercase, colon form). Empty
     dict if nothing has been saved yet."""
     target = default_devices_registry_path(config_dir)
@@ -58,17 +58,16 @@ def load_device_registry(config_dir: Optional[Union[str, Path]] = None) -> Dict[
     }
 
 
-def list_device_infos(config_dir: Optional[Union[str, Path]] = None) -> List[DeviceInfo]:
+def list_device_infos(config_dir: str | Path | None = None) -> list[DeviceInfo]:
     """All known drives, sorted by MAC address."""
     return [info for _, info in sorted(load_device_registry(config_dir).items())]
 
 
-def get_device_info(device_address: str,
-                     config_dir: Optional[Union[str, Path]] = None) -> Optional[DeviceInfo]:
+def get_device_info(device_address: str, config_dir: str | Path | None = None) -> DeviceInfo | None:
     return load_device_registry(config_dir).get(device_address.upper())
 
 
-def save_device_info(info: DeviceInfo, config_dir: Optional[Union[str, Path]] = None) -> Path:
+def save_device_info(info: DeviceInfo, config_dir: str | Path | None = None) -> Path:
     """Adds/updates one entry in the registry (read-modify-write of the whole
     file - fine for the expected handful of paired drives). Returns the path
     used."""

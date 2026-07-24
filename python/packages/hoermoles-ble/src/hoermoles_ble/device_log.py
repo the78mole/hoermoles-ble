@@ -21,13 +21,14 @@ live check is also what caught a transcription error in SERVICE_TYPE_NAMES
 (parse_log_fields) has not been individually exercised for every tag (only
 REGISTER_ROOT and IMPULS_WITH_CLOCK occurred in the one log read so far).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any
 
 # SAL.BlueConnect.API.Devices.LogTag
-LOG_TAG_NAMES: Dict[int, str] = {
+LOG_TAG_NAMES: dict[int, str] = {
     1: "REGISTER_ROOT",
     2: "RELAIS",
     3: "BLOCKED_ADMIN",
@@ -49,7 +50,7 @@ LOG_TAG_NAMES: Dict[int, str] = {
 # Product-specific subclasses like SupraMaticH4ServiceData add further
 # meanings for wire bytes 18+ for their own product, NOT reproduced here -
 # unmapped wire bytes are simply absent from this dict.
-SERVICE_TYPE_NAMES: Dict[int, str] = {
+SERVICE_TYPE_NAMES: dict[int, str] = {
     0: "PowerOnZaehler",
     1: "Betriebsstunden",
     2: "Betriebsstunden seit Wartung",
@@ -86,43 +87,90 @@ SERVICE_TYPE_IS_TIMESTAMP = {6, 9, 11, 12}
 _DEVICE_ACTION_MEMBERS = (
     ("ENABLE_NOTIFICATIONS", 0),
     ("REGISTER_ROOT", 65537),
-    ("CHANNEL_1", 65553), ("CHANNEL_2", 65554), ("CHANNEL_3", 65555),
-    ("CHANNEL_4", 65556), ("CHANNEL_5", 65557), ("CHANNEL_6", 65558),
-    ("GET_LOG", 65569), ("SET_CLOCK", 65570), ("GET_CLOCK", 65571),
-    ("GET_BLOCKLIST", 65572), ("BLOCK_ROOT", 65573), ("BLOCK_USER", 65574),
-    ("BLOCK_OTK", 65575), ("GET_PROPERTIES", 65576), ("SET_PROPERTIES", 65577),
-    ("SOFTWARE_VERSION", 65578), ("FACTORY_RESET", 65579),
-    ("GET_SELECTED_PROPERTIES", 65580), ("SET_CLOCK_TIMEZONE", 65581),
-    ("GET_CLOCK_TIMEZONE", 65582), ("ROOT_NAMES", 65585), ("REBOOT", 65586),
-    ("DFU_RESET", 65587), ("SOFTWARE_VERSION_STRG", 65600),
-    ("SOFTWARE_VERSION_DISPLAY", 65601), ("READ_SERVICE_DATA", 65602),
-    ("READ_SERVICE_ERRORS", 65603), ("READ_PRODUCTION_DATA_STRG", 65604),
-    ("READ_PRODUCTION_DATA_DISPLAY", 65605), ("GET_PRODUCT_SERIAL_NUMBER", 65606),
+    ("CHANNEL_1", 65553),
+    ("CHANNEL_2", 65554),
+    ("CHANNEL_3", 65555),
+    ("CHANNEL_4", 65556),
+    ("CHANNEL_5", 65557),
+    ("CHANNEL_6", 65558),
+    ("GET_LOG", 65569),
+    ("SET_CLOCK", 65570),
+    ("GET_CLOCK", 65571),
+    ("GET_BLOCKLIST", 65572),
+    ("BLOCK_ROOT", 65573),
+    ("BLOCK_USER", 65574),
+    ("BLOCK_OTK", 65575),
+    ("GET_PROPERTIES", 65576),
+    ("SET_PROPERTIES", 65577),
+    ("SOFTWARE_VERSION", 65578),
+    ("FACTORY_RESET", 65579),
+    ("GET_SELECTED_PROPERTIES", 65580),
+    ("SET_CLOCK_TIMEZONE", 65581),
+    ("GET_CLOCK_TIMEZONE", 65582),
+    ("ROOT_NAMES", 65585),
+    ("REBOOT", 65586),
+    ("DFU_RESET", 65587),
+    ("SOFTWARE_VERSION_STRG", 65600),
+    ("SOFTWARE_VERSION_DISPLAY", 65601),
+    ("READ_SERVICE_DATA", 65602),
+    ("READ_SERVICE_ERRORS", 65603),
+    ("READ_PRODUCTION_DATA_STRG", 65604),
+    ("READ_PRODUCTION_DATA_DISPLAY", 65605),
+    ("GET_PRODUCT_SERIAL_NUMBER", 65606),
     ("SET_REGISTER_KEY", 131073),
     ("UNKNOWN", 0xFFFFFFFF),
 )
-DEVICE_ACTION_NAMES: Dict[int, str] = {}
+DEVICE_ACTION_NAMES: dict[int, str] = {}
 for _name, _value in _DEVICE_ACTION_MEMBERS:
     _lower = _value & 0xFFFF
     DEVICE_ACTION_NAMES.setdefault(_lower, _name)
 
 # SAL.BlueConnect.IO.Signed.SignedNotificationType (full enum)
-SIGNED_NOTIFICATION_TYPE_NAMES: Dict[int, str] = {
-    1: "GATE_STATE", 2: "ROOT_KEY", 3: "CLOCK_DATA", 4: "ENABLED",
-    5: "REQUEST_CLOCK", 6: "LOG", 7: "LOG_END", 8: "BLOCK_ROOT",
-    9: "BLOCK_USER", 10: "BLOCK_LIST", 11: "BLOCK_LIST_END", 12: "NAMES_LIST",
-    13: "NAMES_LIST_END", 14: "FACTORY_RESET", 15: "SOFTWARE_VERSION",
-    16: "PROPERTIES_LIST", 17: "PROPERTIES_LIST_END", 18: "PROPERTY_ACCEPTED",
-    19: "PROPERTIES_INVALID", 20: "ROOT_REGISTRATION_POSSIBLE",
-    21: "BLOCK_OTK", 22: "IMPULS_INVALID_CLOCK", 23: "SIGNATURE",
-    24: "SIGNATURE_END", 25: "SERVICE_ERROR", 26: "SERVICE_ERROR_END",
-    27: "SERVICE_DATA", 28: "SERVICE_DATA_END", 29: "SOFTWARE_VERSION_DISPLAY",
-    30: "SOFTWARE_VERSION_CONTROL_UNIT", 31: "PRODUCTION_DATA_CONTROL_UNIT",
-    32: "PRODUCTION_DATA_DISPLAY", 33: "CLOCKDATA_TIMEZONE",
-    34: "PRODUCT_SERIAL_NUMBER", 65280: "TIME_EXPIRED", 65281: "TIME_INVALID",
-    65283: "USER_OR_OTK_INVALID", 65284: "SECURITY_ERROR",
-    65522: "UNKNOWN_ACTION", 65530: "TIMEZONE_NOK", 65531: "OTK_BLOCKLIST_FULL",
-    65532: "ADMIN_INVALID", 65533: "MAX_USER", 65534: "INTERNAL_ERROR",
+SIGNED_NOTIFICATION_TYPE_NAMES: dict[int, str] = {
+    1: "GATE_STATE",
+    2: "ROOT_KEY",
+    3: "CLOCK_DATA",
+    4: "ENABLED",
+    5: "REQUEST_CLOCK",
+    6: "LOG",
+    7: "LOG_END",
+    8: "BLOCK_ROOT",
+    9: "BLOCK_USER",
+    10: "BLOCK_LIST",
+    11: "BLOCK_LIST_END",
+    12: "NAMES_LIST",
+    13: "NAMES_LIST_END",
+    14: "FACTORY_RESET",
+    15: "SOFTWARE_VERSION",
+    16: "PROPERTIES_LIST",
+    17: "PROPERTIES_LIST_END",
+    18: "PROPERTY_ACCEPTED",
+    19: "PROPERTIES_INVALID",
+    20: "ROOT_REGISTRATION_POSSIBLE",
+    21: "BLOCK_OTK",
+    22: "IMPULS_INVALID_CLOCK",
+    23: "SIGNATURE",
+    24: "SIGNATURE_END",
+    25: "SERVICE_ERROR",
+    26: "SERVICE_ERROR_END",
+    27: "SERVICE_DATA",
+    28: "SERVICE_DATA_END",
+    29: "SOFTWARE_VERSION_DISPLAY",
+    30: "SOFTWARE_VERSION_CONTROL_UNIT",
+    31: "PRODUCTION_DATA_CONTROL_UNIT",
+    32: "PRODUCTION_DATA_DISPLAY",
+    33: "CLOCKDATA_TIMEZONE",
+    34: "PRODUCT_SERIAL_NUMBER",
+    65280: "TIME_EXPIRED",
+    65281: "TIME_INVALID",
+    65283: "USER_OR_OTK_INVALID",
+    65284: "SECURITY_ERROR",
+    65522: "UNKNOWN_ACTION",
+    65530: "TIMEZONE_NOK",
+    65531: "OTK_BLOCKLIST_FULL",
+    65532: "ADMIN_INVALID",
+    65533: "MAX_USER",
+    65534: "INTERNAL_ERROR",
     65535: "FAILED",
 }
 
@@ -154,14 +202,14 @@ def _notification_name(data: bytes) -> str:
     return SIGNED_NOTIFICATION_TYPE_NAMES.get(raw, f"UNKNOWN(0x{raw:04x})")
 
 
-def parse_log_fields(log_tag: int, data: bytes) -> Dict[str, Any]:
+def parse_log_fields(log_tag: int, data: bytes) -> dict[str, Any]:
     """SAL.BlueConnect.API.Devices.DeviceLogInfo.ParseData: per-LogTag field layout within
     a log entry's data blob - mirrors the original's guard conditions and slice ranges
     exactly (including its apparent off-by-one quirks in a couple of branches, e.g. RELAIS
     reading a byte at offset 5 while only checking length >= 5) rather than "fixing" them,
     to stay behaviourally identical to the real app. Returns {} for tags/data it doesn't
     recognize rather than guessing."""
-    fields: Dict[str, Any] = {}
+    fields: dict[str, Any] = {}
 
     if log_tag == 1:  # REGISTER_ROOT
         if len(data) >= 2:

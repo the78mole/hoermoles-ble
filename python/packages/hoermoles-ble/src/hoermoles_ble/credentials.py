@@ -9,23 +9,23 @@ resolved via config.resolve_config_dir() (default ~/.hoermoles). Created with
 restrictive permissions (0700/0600) as needed, since root_key_hex is a
 plaintext secret.
 """
+
 from __future__ import annotations
 
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union
 
 from .config import resolve_config_dir
 
 
-def default_credentials_path(device_address: str, config_dir: Optional[Union[str, Path]] = None) -> Path:
+def default_credentials_path(device_address: str, config_dir: str | Path | None = None) -> Path:
     safe_address = device_address.replace(":", "-").upper()
     return resolve_config_dir(config_dir) / "credentials" / f"{safe_address}.json"
 
 
-def list_saved_credential_paths(config_dir: Optional[Union[str, Path]] = None) -> List[Path]:
+def list_saved_credential_paths(config_dir: str | Path | None = None) -> list[Path]:
     """All saved credential files under <config_dir>/credentials/, sorted by
     filename (i.e. by MAC address) for a deterministic order."""
     credentials_dir = resolve_config_dir(config_dir) / "credentials"
@@ -43,7 +43,7 @@ class Credentials:
     created_unix: int = 0
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "Credentials":
+    def load(cls, path: str | Path) -> Credentials:
         data = json.loads(Path(path).read_text())
         return cls(
             device_address=data["device_address"],
@@ -54,12 +54,12 @@ class Credentials:
         )
 
     @classmethod
-    def load_for_device(cls, device_address: str, config_dir: Optional[Union[str, Path]] = None) -> "Credentials":
+    def load_for_device(cls, device_address: str, config_dir: str | Path | None = None) -> Credentials:
         """Loads from the default path (resolved via config_dir/ENV/.env/default)."""
         return cls.load(default_credentials_path(device_address, config_dir))
 
     @classmethod
-    def load_first(cls, config_dir: Optional[Union[str, Path]] = None) -> "Credentials":
+    def load_first(cls, config_dir: str | Path | None = None) -> Credentials:
         """Loads whichever saved credentials file sorts first by filename/MAC address -
         convenience for single-drive setups where passing --address every time is
         unnecessary. Raises FileNotFoundError if no credentials are saved at all."""
@@ -71,8 +71,7 @@ class Credentials:
             )
         return cls.load(paths[0])
 
-    def save(self, path: Optional[Union[str, Path]] = None,
-             config_dir: Optional[Union[str, Path]] = None) -> Path:
+    def save(self, path: str | Path | None = None, config_dir: str | Path | None = None) -> Path:
         """Writes the credentials file. Without `path`, the default path under
         the resolved config_dir is used (see config.py). Returns the path
         actually used."""

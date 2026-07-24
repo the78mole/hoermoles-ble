@@ -4,22 +4,21 @@ interface, not bleak/BlueZ directly - a port to a different BLE stack (e.g.
 NimBLE/Zephyr on a microcontroller) only needs to reimplement these four
 methods; the whole protocol flow in client.py stays the same.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 
 class BleTransport(ABC):
     """A connected GATT channel to exactly one Hoermann BlueSecur drive."""
 
     @abstractmethod
-    async def connect(self) -> None:
-        ...
+    async def connect(self) -> None: ...
 
     @abstractmethod
-    async def disconnect(self) -> None:
-        ...
+    async def disconnect(self) -> None: ...
 
     @abstractmethod
     async def write(self, data: bytes) -> None:
@@ -31,10 +30,9 @@ class BleTransport(ABC):
         """Subscribes to notifications on the RX characteristic."""
 
     @abstractmethod
-    async def stop_notify(self) -> None:
-        ...
+    async def stop_notify(self) -> None: ...
 
-    async def __aenter__(self) -> "BleTransport":
+    async def __aenter__(self) -> BleTransport:
         await self.connect()
         return self
 

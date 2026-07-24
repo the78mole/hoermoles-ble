@@ -1,2 +1,18 @@
 [tool.uv.workspace]
 members = ["packages/*"]
+
+[tool.ruff]
+line-length = 120
+# menu_settings.py is intentionally one data literal per line (one MenuSetting
+# per menu, mirroring the source JSON 1:1 for easy diffing/verification) -
+# some of those lines run past 500 characters; ruff-format would explode each
+# into a multi-line call, which defeats the point. Excluded from lint/format.
+extend-exclude = ["**/menu_settings.py"]
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001",   # blind `except Exception` - used deliberately for best-effort cleanup/parsing
+    "S112",     # try-except-continue without logging - same best-effort parsing spots
+    "PYI034",   # __aenter__ -> Self - would need typing.Self (py3.11+), project supports 3.10
+    "ASYNC230", # blocking open() in an async def - fine for a one-shot CLI command, not a server
+]
