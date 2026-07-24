@@ -139,6 +139,25 @@ describe('local round trips', () => {
     expect(restored.rootId).toBe(7);
   });
 
+  it('shareable link round-trips through both receiver paths', async () => {
+    // The exact form ExportPanel builds: the bundle embedded verbatim (NOT
+    // percent-encoded) after '#import='. Both consumers must recover it - and
+    // the encrypted form matters most, since that is the only one linked.
+    const text = await encodeBundle([entry], 'pw');
+    const link = `https://the78mole.github.io/hoermoles-ble/app/#import=${text}`;
+
+    // 1. decodeBundle handling a whole URL directly.
+    const [direct] = await decodeBundle(link, 'pw');
+    expect(direct.rootId).toBe(7);
+
+    // 2. The App.svelte path: read the fragment, decodeURIComponent it, decode.
+    //    decodeURIComponent must be a harmless no-op on this base64url alphabet.
+    const fragment = link.slice(link.indexOf('#import=') + '#import='.length);
+    expect(decodeURIComponent(fragment)).toBe(text); // no mangling
+    const [viaApp] = await decodeBundle(decodeURIComponent(fragment), 'pw');
+    expect(viaApp.rootId).toBe(7);
+  });
+
   it('JSON file form', async () => {
     const [restored] = bundleFromJson(bundleToJson([entry]));
     expect(restored.rootId).toBe(7);

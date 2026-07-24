@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { StoredCredential } from 'hoermoles-ble-js';
+  import { PREFIX_ENCRYPTED, type StoredCredential } from 'hoermoles-ble-js';
 
   import { displayName, exportBundleJson, exportBundleText, isExportable } from '../lib/drives.svelte';
+  import QrDisplay from './QrDisplay.svelte';
 
   interface Props {
     drives: StoredCredential[];
@@ -13,14 +14,46 @@
   let confirmation = $state('');
   let encrypt = $state(true);
   let output = $state<string | null>(null);
+  let showQr = $state(false);
+  let feedback = $state<string | null>(null);
   let error = $state<string | null>(null);
 
   const exportable = $derived(drives.filter(isExportable));
   const blocked = $derived(drives.filter((drive) => !isExportable(drive)));
 
+  // A shareable link is only offered for the encrypted form. The credential
+  // rides in the URL's # fragment, which is never sent to a server (see below),
+  // but it does persist in browser history, the clipboard, and chat-app link
+  // previews - so an unencrypted one would scatter a plaintext root key. This
+  // mirrors the deep-link policy in SPA_PLAN.md.
+  const shareLink = $derived.by(() => {
+    if (!output || !output.startsWith(PREFIX_ENCRYPTED)) return null;
+    // The app's own URL, minus any existing hash/query and a trailing
+    // index.html, so the link works wherever the app is hosted.
+    const base = (location.origin + location.pathname).replace(/index\.html$/, '');
+    // The bundle is embedded verbatim, NOT through encodeURIComponent: it is
+    // already base64url (URL-fragment-safe by construction, see bundle.ts), and
+    // percent-encoding the "HMOLES1E:" prefix's colon would break the plain-text
+    // consumers - `hoermoles-ble import "<link>"` splits on "#import=" without
+    // URL-decoding and would then reject the mangled prefix (verified). The
+    // in-app receiver (App.svelte) runs decodeURIComponent, which is a harmless
+    // no-op on this alphabet.
+    return `${base}#import=${output}`;
+  });
+
+  const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  function resetOutput() {
+    output = null;
+    showQr = false;
+    feedback = null;
+  }
+
   async function exportText() {
     error = null;
+    feedback = null;
     output = null;
+    showQr = false;
     if (encrypt) {
       if (passphrase === '') {
         error = 'Enter a passphrase, or turn encryption off deliberately.';
@@ -55,8 +88,27 @@
     }
   }
 
-  async function copyOutput() {
-    if (output) await navigator.clipboard.writeText(output);
+  async function copyText(value: string | null, label: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      feedback = `${label} copied to the clipboard.`;
+    } catch {
+      feedback = `Could not access the clipboard - select the text and copy it manually.`;
+    }
+  }
+
+  async function shareViaSheet() {
+    if (!shareLink) return;
+    try {
+      await navigator.share({
+        title: 'Hoermoles drive',
+        text: 'Open this in Hoermoles to add the drive (you will need the passphrase).',
+        url: shareLink,
+      });
+    } catch {
+      // The user dismissing the share sheet also rejects - not an error worth showing.
+    }
   }
 </script>
 
@@ -82,7 +134,7 @@
 
     {#if exportable.length > 0}
       <label class="inline">
-        <input type="checkbox" bind:checked={encrypt} />
+        <input type="checkbox" bind:checked={encrypt} onchange={resetOutput} />
         Encrypt with a passphrase
       </label>
 
@@ -93,28 +145,66 @@
         <input id="export-pass2" type="password" bind:value={confirmation} autocomplete="new-password" />
       {:else}
         <div class="notice danger">
-          Without a passphrase this text <em>is</em> the key to your garage. Anyone who photographs it, or
-          finds it in a chat or browser history, can open the door.
+          Without a passphrase this <em>is</em> the key to your garage. Anyone who photographs the QR code,
+          or finds the text in a chat or browser history, can open the door.
         </div>
       {/if}
 
       <div class="row" style="margin-top: 0.75rem">
-        <button class="primary" onclick={exportText}>Show export code</button>
+        <button class="primary" onclick={exportText}>Export</button>
         <button onclick={downloadJson}>Download JSON file</button>
       </div>
     {/if}
 
     {#if output}
+      <div class="row" style="margin-top: 1rem">
+        <button onclick={() => copyText(output, 'Export code')}>Copy code</button>
+        <button aria-pressed={showQr} onclick={() => (showQr = !showQr)}>
+          {showQr ? 'Hide QR code' : 'Show QR code'}
+        </button>
+        <button onclick={resetOutput}>Hide</button>
+      </div>
+
+      {#if showQr}
+        <p class="muted" style="margin-top: 0.75rem">
+          Scan this from another phone's <strong>Add</strong> tab. Hold it steady and fill the frame.
+        </p>
+        <div style="display: flex; justify-content: center; margin: 0.5rem 0">
+          <QrDisplay text={output} />
+        </div>
+      {/if}
+
       <label for="export-output">Export code</label>
       <textarea id="export-output" readonly value={output}></textarea>
-      <div class="row">
-        <button onclick={copyOutput}>Copy to clipboard</button>
-        <button onclick={() => (output = null)}>Hide</button>
-      </div>
       <p class="muted">
         Import it with <code>hoermoles-ble import "&lt;code&gt;"</code>, or paste it into this app on
         another device.
       </p>
+
+      {#if shareLink}
+        <p style="font-weight: 600; margin: 0.75rem 0 0.25rem">Shareable link</p>
+        <p class="muted">
+          Opens the app with this drive filled in. The credential travels in the link's
+          <code>#</code> fragment, which browsers never send to any server - GitHub Pages only ever sees the
+          plain app. It does stay in history and messages, though, which is why links are offered for the encrypted
+          export only. The recipient still needs the passphrase.
+        </p>
+        <div class="row">
+          <button class="primary" onclick={() => copyText(shareLink, 'Link')}>Copy link</button>
+          {#if canNativeShare}
+            <button onclick={shareViaSheet}>Share…</button>
+          {/if}
+        </div>
+      {:else}
+        <p class="muted">
+          Turn on encryption and export again to also get a shareable link - unencrypted links are
+          withheld on purpose, since a link lingers in history and chat previews.
+        </p>
+      {/if}
+
+      {#if feedback}
+        <div class="notice success">{feedback}</div>
+      {/if}
     {/if}
 
     {#if error}

@@ -100,7 +100,12 @@ default - it can sign door commands afterwards but can never hand the key on
 again unless you explicitly opt into re-export.
 
 Drives can also be registered directly in the web app (camera QR scan), with no
-CLI involved at all.
+CLI involved at all. The app's **Export** tab does the reverse too - it shows a
+credential as a QR code to scan from another phone, or builds a shareable link.
+That link carries the credential in its URL `#` fragment, which browsers never
+send to a server (so a static GET host like Pages never sees it), but which does
+persist in history and chat previews - so links are offered for the encrypted
+export only, and the recipient still needs the passphrase.
 
 ## Shared artifacts
 
