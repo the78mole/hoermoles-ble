@@ -53,6 +53,12 @@ Layout under the config directory:
 
 ## Usage
 
+Just want the CLI, not a full checkout of this repo? `uv tool install
+hoermoles-ble-cli` gives you the `hoermoles-ble` command directly (see
+`packages/hoermoles-ble/README.md` for that walkthrough). The rest of this
+section assumes you're working from this workspace checkout instead (prefix
+every command with `uv run`).
+
 There's no companion app with camera QR scanning yet, so QR code contents
 (photographed and typed off, or read with a separate scanner app) are saved
 once and matched to a scanned device automatically by the serial number

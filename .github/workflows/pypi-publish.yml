@@ -1,51 +1,135 @@
-name: Publish hoermoles-ble to PyPI
+name: Create Release and Publish to PyPI
+
+# IMPORTANT: everything lives in this ONE file, on purpose. PyPI Trusted
+# Publishing (OIDC) does not support reusable workflows (`workflow_call`) -
+# the token's "Build Config URI" claim identifies the top-level/calling
+# workflow, not the reusable one that actually runs the publish step, so a
+# split like "release.yml calls pypi-publish.yml" fails PyPI's trusted
+# publisher check with a 400 ("does not match expected Trusted Publisher").
+# See https://docs.pypi.org/trusted-publishers/troubleshooting/#reusable-workflows-on-github
+# and https://github.com/pypa/gh-action-pypi-publish/issues/166 - GitHub's
+# own annotation explicitly says not to rely on reusable workflows here.
+# This filename must match the "Workflow" field configured in PyPI's Trusted
+# Publisher settings for both the hoermoles-ble and hoermoles-ble-cli projects.
+#
+# Tags are prefixed "python/v..." (not just "v...") since this is a monorepo -
+# other components (e.g. a future SPA) will get their own "<component>/v..."
+# tag namespace and semantic-version calculation, independent of this one.
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: 'Version to publish'
-        required: true
-        type: string
-      version_tag:
-        description: 'Version tag (e.g., v1.0.0)'
-        required: true
-        type: string
-      environment:
-        description: 'GitHub environment to deploy from (must match the PyPI Trusted Publisher config)'
-        required: false
-        type: string
-        default: 'pypi'
-      package-directory:
-        description: 'Path (relative to repo root) of the package to build and publish'
-        required: false
-        type: string
-        default: 'python/packages/hoermoles-ble'
+  push:
+    branches:
+      - main
+    paths:
+      - 'python/**'
+      - '.github/workflows/*.yml'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to publish (e.g., 1.0.0)'
+      publish_target:
+        description: 'Publish target'
         required: true
-        type: string
-      version_tag:
-        description: 'Version tag (e.g., v1.0.0)'
-        required: false
-        type: string
-        default: ''
-      environment:
-        description: 'GitHub environment to deploy from (must match the PyPI Trusted Publisher config)'
-        required: false
-        type: string
-        default: 'pypi'
-      package-directory:
-        description: 'Path (relative to repo root) of the package to build and publish'
-        required: false
-        type: string
-        default: 'python/packages/hoermoles-ble'
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - pypi-only
+          - none
 
 jobs:
-  build:
-    name: Build distribution
+  version:
+    name: Calculate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      version_tag: ${{ steps.semver.outputs.version_tag }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Calculate semantic version
+      id: semver
+      uses: paulhatch/semantic-version@v5.4.0
+      with:
+        tag_prefix: "python/v"
+        major_pattern: "/(feat|fix|refactor)!:/"
+        minor_pattern: "/^feat:/"
+        version_format: "${major}.${minor}.${patch}"
+        bump_each_commit: true
+        search_commit_body: true
+
+    - name: Show version
+      run: |
+        echo "Version: ${{ steps.semver.outputs.version }}"
+        echo "Version Tag: ${{ steps.semver.outputs.version_tag }}"
+
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 📦 Neue Version berechnet
+
+        **Version:** \`${{ steps.semver.outputs.version }}\`
+        **Git-Tag:** \`${{ steps.semver.outputs.version_tag }}\`
+
+        Diese Version wird für Release und PyPI-Veröffentlichung von
+        hoermoles-ble und hoermoles-ble-cli verwendet (gemeinsames Tag für
+        beide Pakete des Python-Teils dieses Mono-Repos).
+        EOF
+
+  create-release:
+    name: Create GitHub Release
+    needs: [version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Create Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create ${{ needs.version.outputs.version_tag }} \
+          --title "hoermoles-ble ${{ needs.version.outputs.version }}" \
+          --notes "## hoermoles-ble ${{ needs.version.outputs.version }}
+
+        Independent control of Hoermann garage door drives over the BlueSecur
+        BLE \"Signed\" protocol - without the official app/cloud.
+
+        Automatic release via semantic versioning (patch-bump on every commit
+        to \`main\`).
+
+        ### CLI
+
+        \`\`\`bash
+        uv tool install hoermoles-ble-cli
+        hoermoles-ble scan
+        \`\`\`
+
+        ### Library
+
+        \`\`\`bash
+        pip install hoermoles-ble==${{ needs.version.outputs.version }}
+        \`\`\`
+
+        See the [workspace README](https://github.com/${{ github.repository }}/blob/main/python/README.md)
+        for the full command reference (\`register\`, \`exec\`, \`menu-get\`/
+        \`menu-set\`, \`view-log\`, \`list-devices\`, ...)." \
+          --latest
+
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🏷️ GitHub Release erstellt
+
+        **Release:** [${{ needs.version.outputs.version_tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.version_tag }})
+        EOF
+
+  build-lib:
+    name: Build hoermoles-ble distribution
+    needs: [version]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.publish_target == 'all' || github.event.inputs.publish_target == 'pypi-only'))
     runs-on: ubuntu-latest
 
     steps:
@@ -62,36 +146,36 @@ jobs:
         pip install build twine
 
     - name: Set package version
-      # hoermoles-ble/hoermoles-ble-cli use a plain static `version = "..."` in
-      # [project] (no hatch-vcs/dynamic versioning) - `hatch version <x>` refuses
-      # to touch that ("Cannot set version when it is statically defined by the
-      # project.version field"), so this rewrites the line directly instead.
-      working-directory: ${{ inputs.package-directory }}
+      # hoermoles-ble uses a plain static `version = "..."` in [project] (no
+      # hatch-vcs/dynamic versioning) - `hatch version <x>` refuses to touch
+      # that ("Cannot set version when it is statically defined by the
+      # project.version field", verified locally), so this rewrites the line
+      # directly instead.
+      working-directory: python/packages/hoermoles-ble
       run: |
         python3 -c "
         import re, pathlib
         path = pathlib.Path('pyproject.toml')
         text = path.read_text()
-        new_text, count = re.subn(r'(?m)^version = \"[^\"]*\"', 'version = \"${{ inputs.version }}\"', text, count=1)
+        new_text, count = re.subn(r'(?m)^version = \"[^\"]*\"', 'version = \"${{ needs.version.outputs.version }}\"', text, count=1)
         assert count == 1, 'expected exactly one version = \"...\" line in [project]'
         path.write_text(new_text)
         "
         grep '^version = ' pyproject.toml
 
     - name: Build package
-      working-directory: ${{ inputs.package-directory }}
+      working-directory: python/packages/hoermoles-ble
       run: python -m build
 
     - name: Check distribution
-      working-directory: ${{ inputs.package-directory }}
+      working-directory: python/packages/hoermoles-ble
       run: |
         twine check dist/*
 
         cat >> $GITHUB_STEP_SUMMARY <<EOF
-        ## 🔨 Package Build
+        ## 🔨 hoermoles-ble Build
 
-        **Package:** \`${{ inputs.package-directory }}\`
-        **Version:** \`${{ inputs.version }}\`
+        **Version:** \`${{ needs.version.outputs.version }}\`
 
         Folgende Distributions wurden erstellt:
 
@@ -103,16 +187,16 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: python-package-distributions
-        path: ${{ inputs.package-directory }}/dist/
+        name: hoermoles-ble-dist
+        path: python/packages/hoermoles-ble/dist/
 
-  publish-to-pypi:
-    name: Publish to PyPI
-    needs: build
+  publish-lib-to-pypi:
+    name: Publish hoermoles-ble to PyPI
+    needs: [version, build-lib]
     runs-on: ubuntu-latest
 
     environment:
-      name: ${{ inputs.environment }}
+      name: pypi
       url: https://pypi.org/p/hoermoles-ble
 
     permissions:
@@ -122,7 +206,7 @@ jobs:
     - name: Download distributions
       uses: actions/download-artifact@v4
       with:
-        name: python-package-distributions
+        name: hoermoles-ble-dist
         path: dist/
 
     - name: Publish to PyPI
@@ -131,14 +215,143 @@ jobs:
     - name: Add PyPI Summary
       run: |
         cat >> $GITHUB_STEP_SUMMARY <<EOF
-        ## 🚀 PyPI Veröffentlichung
+        ## 🚀 hoermoles-ble PyPI Veröffentlichung
 
         **Package:** [hoermoles-ble](https://pypi.org/project/hoermoles-ble/)
-        **Version:** \`${{ inputs.version }}\`
+        **Version:** \`${{ needs.version.outputs.version }}\`
 
         ### Installation
 
         \`\`\`bash
-        pip install hoermoles-ble==${{ inputs.version }}
+        pip install hoermoles-ble==${{ needs.version.outputs.version }}
         \`\`\`
+        EOF
+
+  build-cli:
+    name: Build hoermoles-ble-cli distribution
+    needs: [version]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.publish_target == 'all' || github.event.inputs.publish_target == 'pypi-only'))
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Set package version
+      # same static-version caveat as hoermoles-ble - see the comment there.
+      working-directory: python/packages/hoermoles-ble-cli
+      run: |
+        python3 -c "
+        import re, pathlib
+        path = pathlib.Path('pyproject.toml')
+        text = path.read_text()
+        new_text, count = re.subn(r'(?m)^version = \"[^\"]*\"', 'version = \"${{ needs.version.outputs.version }}\"', text, count=1)
+        assert count == 1, 'expected exactly one version = \"...\" line in [project]'
+        path.write_text(new_text)
+        "
+        grep '^version = ' pyproject.toml
+
+    - name: Build package
+      working-directory: python/packages/hoermoles-ble-cli
+      run: python -m build
+
+    - name: Check distribution
+      working-directory: python/packages/hoermoles-ble-cli
+      run: |
+        twine check dist/*
+
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🔨 hoermoles-ble-cli Build
+
+        **Version:** \`${{ needs.version.outputs.version }}\`
+
+        Folgende Distributions wurden erstellt:
+
+        \`\`\`
+        $(ls -lh dist/)
+        \`\`\`
+        EOF
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: hoermoles-ble-cli-dist
+        path: python/packages/hoermoles-ble-cli/dist/
+
+  publish-cli-to-pypi:
+    name: Publish hoermoles-ble-cli to PyPI
+    needs: [version, build-cli]
+    runs-on: ubuntu-latest
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hoermoles-ble-cli
+
+    permissions:
+      id-token: write  # required for PyPI Trusted Publishing (OIDC) - no API token/secret needed
+
+    steps:
+    - name: Download distributions
+      uses: actions/download-artifact@v4
+      with:
+        name: hoermoles-ble-cli-dist
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+
+    - name: Add PyPI Summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🚀 hoermoles-ble-cli PyPI Veröffentlichung
+
+        **Package:** [hoermoles-ble-cli](https://pypi.org/project/hoermoles-ble-cli/)
+        **Version:** \`${{ needs.version.outputs.version }}\`
+
+        ### Installation
+
+        \`\`\`bash
+        uv tool install hoermoles-ble-cli
+        hoermoles-ble scan
+        \`\`\`
+        EOF
+
+  summary:
+    name: Release Summary
+    needs: [version, create-release, build-lib, publish-lib-to-pypi, build-cli, publish-cli-to-pypi]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Create Summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY <<EOF
+        ## 🎉 Release Workflow Abgeschlossen
+
+        **Version:** \`${{ needs.version.outputs.version }}\`
+        **Git Tag:** \`${{ needs.version.outputs.version_tag }}\`
+
+        ### Status
+
+        - GitHub Release: ${{ needs.create-release.result == 'success' && '✅' || '❌' }}
+        - PyPI Publish (hoermoles-ble): ${{ needs.publish-lib-to-pypi.result == 'success' && '✅' || needs.publish-lib-to-pypi.result == 'skipped' && '⏭️' || '❌' }}
+        - PyPI Publish (hoermoles-ble-cli): ${{ needs.publish-cli-to-pypi.result == 'success' && '✅' || needs.publish-cli-to-pypi.result == 'skipped' && '⏭️' || '❌' }}
+
+        ### Links
+
+        - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.version_tag }})
+        - [PyPI: hoermoles-ble](https://pypi.org/project/hoermoles-ble/)
+        - [PyPI: hoermoles-ble-cli](https://pypi.org/project/hoermoles-ble-cli/)
         EOF

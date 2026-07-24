@@ -1,15 +1,18 @@
 # hoermoles-ble-cli
 
-Thin CLI wrapper around `hoermoles-ble`. After `uv sync` in the workspace root:
+Thin CLI wrapper around `hoermoles-ble`. Install standalone with
+`uv tool install hoermoles-ble-cli` (gives you the `hoermoles-ble` command
+directly), or, from a workspace checkout, `uv sync` in the workspace root and
+prefix every command below with `uv run`:
 
 ```
-uv run hoermoles-ble scan
-uv run hoermoles-ble list-devices                         # show known drives + product type
-uv run hoermoles-ble register --address <MAC> --qr-file <path-to-qr-code.txt>
-uv run hoermoles-ble exec --address <MAC> open
-uv run hoermoles-ble menu-get --address <MAC> 52          # read one operator menu
-uv run hoermoles-ble menu-set --address <MAC> 52=1        # write one operator menu
-uv run hoermoles-ble view-log --address <MAC>             # audit log + diagnostics counters
+hoermoles-ble scan
+hoermoles-ble list-devices                         # show known drives + product type
+hoermoles-ble register --address <MAC> --qr-file <path-to-qr-code.txt>
+hoermoles-ble exec --address <MAC> open
+hoermoles-ble menu-get --address <MAC> 52          # read one operator menu
+hoermoles-ble menu-set --address <MAC> 52=1        # write one operator menu
+hoermoles-ble view-log --address <MAC>             # audit log + diagnostics counters
 ```
 
 `scan` (and `register`, via the QR code) saves each drive's product type to a

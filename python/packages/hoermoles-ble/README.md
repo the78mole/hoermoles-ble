@@ -2,10 +2,18 @@
 
 ## Getting started: commissioning a drive
 
-Everyday use is via the `hoermoles-ble` CLI (package `hoermoles-ble-cli`,
-built on top of this library):
+Everyday use is via the `hoermoles-ble` CLI (published separately as package
+`hoermoles-ble-cli`, built on top of this library):
 
-1. `cd python && uv sync` - installs the workspace, including the CLI.
+1. Install the CLI as a standalone tool - this gives you the `hoermoles-ble`
+   command on your `$PATH`, no workspace checkout needed:
+
+   ```bash
+   uv tool install hoermoles-ble-cli
+   ```
+
+   (Contributing to/developing this repo instead? Use `cd python && uv sync`
+   and prefix every command below with `uv run` instead.)
 
 2. Get the QR code sticker's content onto disk - there's no camera-scanning
    app yet, so either read it with a separate scanner app, or take a photo of
@@ -14,14 +22,14 @@ built on top of this library):
    Then save the decoded content once:
 
    ```bash
-   uv run hoermoles-ble save-qr "<QR code content>"
+   hoermoles-ble save-qr "<QR code content>"
    ```
 
 3. Scan for the drive over BLE - matches the saved QR code by serial number
    and saves the drive's product type to the device registry (see below):
 
    ```bash
-   uv run hoermoles-ble scan
+   hoermoles-ble scan
    ```
 
    Seeing only the short packet ("incompletely parsed", no `Admin taught:
@@ -38,7 +46,7 @@ built on top of this library):
    existing pairing, e.g. with your phone):
 
    ```bash
-   uv run hoermoles-ble register --address <MAC>
+   hoermoles-ble register --address <MAC>
    ```
 
    This derives and saves the root key under
@@ -48,7 +56,7 @@ built on top of this library):
 5. Trigger the gate:
 
    ```bash
-   uv run hoermoles-ble exec --address <MAC> impulse
+   hoermoles-ble exec --address <MAC> impulse
    ```
 
 From here on `--address` can usually be omitted (it defaults to the only/

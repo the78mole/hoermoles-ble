@@ -17,7 +17,9 @@ as the dependency-free reference implementation).
 ## Quickstart
 
 ```bash
-cd python
-uv sync
-uv run hoermoles-ble scan
+uv tool install hoermoles-ble-cli
+hoermoles-ble scan
 ```
+
+Working on this repo instead? `cd python && uv sync`, then prefix commands
+with `uv run` - see `python/README.md`.
