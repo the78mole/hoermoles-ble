@@ -53,7 +53,7 @@ These drive the design the way the Web Bluetooth constraints drove the SPA.
 | Capability | In HA | Consequence for us |
 | --- | --- | --- |
 | Passive advertisement callbacks | `bluetooth.async_register_callback(match=...)`, shared across all adapters + ESPHome proxies | The **primary** data source - free, connectionless, no root key. Feeds `AdvertisementInfo.from_scan` |
-| Two alternating manufacturer packets (6 + 17 bytes) | HA delivers each `BluetoothServiceInfoBleak` as it arrives | Same quirk as the CLI (`advertisement.py` docstring): we must **accumulate** payloads across callbacks, not parse a single one, or every flag comes back falsely `False` |
+| Two alternating manufacturer packets (6 + 17 bytes) | HA delivers each `BluetoothServiceInfoBleak` as it arrives | Same quirk as the CLI (`advertisement.py`): **accumulate** payloads across callbacks. But an *idle* drive was measured emitting **only the long (17-byte) packet** for minutes on end - the short "status" packet appears mainly around activity. `from_scan(product_class=…)` now partial-parses that lone packet for **position + serial + maintenance**; the status flags (`in_action`, `low_battery`, relais) stay `None` until the short packet is seen (see section 2) |
 | Connectable device lookup | `async_ble_device_from_address(hass, addr, connectable=True)` | Needed for control. Returns `None` when only a non-connectable proxy has seen the drive - handle that as "sensors work, control unavailable" |
 | Connection establishment | `bleak-retry-connector.establish_connection()` | Replaces our `BleakClient(address)`. Adds retry/backoff and slot management HA needs. **The core lib's `BleakTransport` must accept an injected client** (section 4) |
 | ESPHome Bluetooth proxy | connect + write proxied over the network | The timing risk (section 12, risk 1) is **worse** here: the ~100-150 ms write window may be unmeetable over a *transparent* proxy round-trip. Local adapter preferred - or offload the timing to a smart ESPHome component (section 7) |
@@ -64,10 +64,21 @@ These drive the design the way the Web Bluetooth constraints drove the SPA.
 
 **Passive plane (always on, no credential, no connection).** An
 `ActiveBluetoothProcessorCoordinator` (from `habluetooth`) subscribed to the
-matcher accumulates the two manufacturer packets per drive and runs
+matcher accumulates the manufacturer packets per drive and runs
 `AdvertisementInfo.from_scan`. Every advertisement refreshes the passive
 entities. This is the whole reason the integration is pleasant: door position
 and motion update in near-real-time with zero connection cost.
+
+One measured caveat shapes this plane: an **idle drive emits only its long
+packet** (verified over a 5-minute idle capture - the short packet never
+appeared), so `from_scan` is called with the drive's known `product_class` and
+partial-parses **position, serial and maintenance** from that lone packet. The
+richer **status flags** (moving, low battery, relais, protection, vacation)
+depend on the short packet and therefore populate mainly around activity - so
+those binary_sensors should be modelled as **may-be-unknown**, not "always
+fresh". Position is the reliable resting-state signal; motion flags are
+best-effort. The one-shot `AdvertisementInfo` accumulator is exactly `from_scan`,
+so no change to the parser is needed beyond passing the class hint.
 
 **Control plane (ephemeral, credential-gated).** Channel commands and the
 optional menu/log/service reads open a connection, do the one exchange, and

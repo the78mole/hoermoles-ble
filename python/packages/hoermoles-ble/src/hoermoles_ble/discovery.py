@@ -9,18 +9,27 @@ from pathlib import Path
 from bleak import BleakScanner
 
 from .advertisement import COMPANY_ID, AdvertisementInfo
+from .devices import load_device_registry
 from .protocol import BC_SERVICE
 from .qr_store import known_qr_serial_map
 
 
-async def scan_devices(timeout: float = 8.0, adapter: str | None = None) -> list[AdvertisementInfo]:
+async def scan_devices(
+    timeout: float = 8.0, adapter: str | None = None, config_dir: str | Path | None = None
+) -> list[AdvertisementInfo]:
     """Scans for `timeout` seconds for devices advertising the BlueConnect
     service (669a9001-...), collecting all manufacturer-data payloads seen
     (Company ID 1972) for each device found - a single advertisement packet
     usually isn't enough for the full parser (see advertisement.py), so the
-    scan runs over an entire time window."""
+    scan runs over an entire time window.
+
+    For any address already in the device registry (see devices.py), the known
+    product_class is passed to the parser, so that even a resting drive that only
+    emits its long packet still yields its opening position (see
+    AdvertisementInfo.from_scan)."""
     payloads_by_address: dict[str, list[bytes]] = {}
     rssi_by_address: dict[str, int] = {}
+    known_classes = {addr.upper(): info.product_class for addr, info in load_device_registry(config_dir).items()}
 
     def _on_detection(device, adv_data) -> None:
         if BC_SERVICE.lower() not in [u.lower() for u in adv_data.service_uuids]:
@@ -40,7 +49,9 @@ async def scan_devices(timeout: float = 8.0, adapter: str | None = None) -> list
     await scanner.stop()
 
     return [
-        AdvertisementInfo.from_scan(address, rssi_by_address[address], payloads)
+        AdvertisementInfo.from_scan(
+            address, rssi_by_address[address], payloads, product_class=known_classes.get(address.upper())
+        )
         for address, payloads in payloads_by_address.items()
     ]
 
@@ -59,7 +70,7 @@ async def find_qr_for_address(
     known = known_qr_serial_map(config_dir)
     if not known:
         return None
-    devices = await scan_devices(timeout=timeout, adapter=adapter)
+    devices = await scan_devices(timeout=timeout, adapter=adapter, config_dir=config_dir)
     for info in devices:
         if info.address.lower() == address.lower() and info.serial_no is not None:
             return known.get(info.serial_no)

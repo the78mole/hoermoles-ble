@@ -89,17 +89,20 @@ READ_SERVICE_DATA_COMMAND_ID = 0x0042
 # product family (BlueApp.Core.Services.ChannelDefaultsService.TryGetDefaultsFor,
 # ChannelCategory per DeviceAction.CHANNEL_n - identical for every product in
 # that family except CHANNEL_6, which is absent on the plain SUPRAMATIC_4
-# variant). CHANNEL_1 ("impulse", ChannelCategory.Other) is the factory-default
-# toggle command and the only one verified live so far;
-# "light"/"partial"/"open"/"close"/"ventilation" are structurally derived from
-# the decompiled defaults table but not yet confirmed against real hardware.
+# variant). Verified live against a real Supramatic S4: CHANNEL_1 ("impulse",
+# the factory-default open/stop/close toggle), CHANNEL_3 ("partial") and
+# CHANNEL_6 ("ventilation") - the latter two confirmed by driving the door from
+# partial to ventilation (advertisement opening dropped to ~4%) and back to
+# partial (~12%), read straight from the advertisement. "light"/"open"/"close"
+# remain only structurally derived from the decompiled defaults table, not yet
+# confirmed against real hardware.
 GATE_ACTIONS = {
-    "impulse": 1,  # ChannelCategory.Other - factory default, toggles open/stop/close
-    "light": 2,  # ChannelCategory.Light
-    "partial": 3,  # ChannelCategory.Partial (Teiloeffnung)
-    "open": 4,  # ChannelCategory.Open (Richtungswahl Tor-AUF)
-    "close": 5,  # ChannelCategory.Close (Richtungswahl Tor-ZU)
-    "ventilation": 6,  # ChannelCategory.VentilationPosition - not present on every model
+    "impulse": 1,  # ChannelCategory.Other - factory default, toggles open/stop/close (verified live)
+    "light": 2,  # ChannelCategory.Light (unverified)
+    "partial": 3,  # ChannelCategory.Partial (Teiloeffnung) - verified live
+    "open": 4,  # ChannelCategory.Open (Richtungswahl Tor-AUF) (unverified)
+    "close": 5,  # ChannelCategory.Close (Richtungswahl Tor-ZU) (unverified)
+    "ventilation": 6,  # ChannelCategory.VentilationPosition - not on every model; verified live
 }
 
 # DeviceAction.REGISTER_ROOT = 65537 = 0x10001, lower 16-bit word

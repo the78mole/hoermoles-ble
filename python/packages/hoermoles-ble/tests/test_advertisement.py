@@ -50,10 +50,45 @@ def test_from_scan_no_payloads():
     assert info.raw_manufacturer_data == []
 
 
-def test_from_scan_single_payload_sets_parse_error():
+def test_from_scan_single_short_packet_parses_nothing():
+    # A lone packet shorter than the long (serial/position-carrying) packet can't
+    # be decoded - honest parse_error, no faked fields, and no misleading
+    # "scan longer" (an idle drive only ever sends the one packet).
     info = AdvertisementInfo.from_scan("AA:BB:CC:DD:EE:FF", -60, [b"\x01\x02"])
     assert info.parse_error is not None
-    assert "need at least 2" in info.parse_error
+    assert "too short" in info.parse_error
+    assert "scan longer" not in info.parse_error
+    assert info.serial_no is None
+    assert info.opening_progress_percent is None
+
+
+def test_from_scan_single_long_packet_with_class_hint_gives_position_and_serial():
+    # The long packet alone (idle drive) still carries serial + position when the
+    # product_class is known; status flags stay None (they're in the short packet).
+    full = _make_full_payload(product_id=2, product_class=2, serial_no=302626026414510307)
+    long_packet = full[6:23]  # combined data[8:25] - the 17-byte long packet
+    info = AdvertisementInfo.from_scan("F1:26:AF:CC:41:86", -59, [long_packet], product_class=2)
+
+    assert info.serial_no == 302626026414510307
+    assert info.opening_progress_percent == 40.0
+    assert info.maintenance_required is True
+    # status flags need the short packet - deliberately left unknown
+    assert info.admin_teached is None
+    assert info.in_action is None
+    assert info.low_battery is None
+    assert info.parse_error is not None
+    assert "long advertisement packet" in info.parse_error
+
+
+def test_from_scan_single_long_packet_without_class_hint_gives_serial_only():
+    full = _make_full_payload(product_id=2, product_class=2, serial_no=123456789)
+    long_packet = full[6:23]
+    info = AdvertisementInfo.from_scan("F1:26:AF:CC:41:86", -59, [long_packet])
+
+    assert info.serial_no == 123456789  # class-independent, from the trailing 8 bytes
+    assert info.opening_progress_percent is None  # needs the class to interpret
+    assert info.maintenance_required is None
+    assert info.parse_error is not None
 
 
 def test_from_scan_two_payloads_too_short_sets_parse_error():

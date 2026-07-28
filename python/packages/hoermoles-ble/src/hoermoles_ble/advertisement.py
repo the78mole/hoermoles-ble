@@ -13,9 +13,17 @@ Important quirk: the device sends the content for Company ID 1972 across two
 different, alternating manufacturer-data packets (6 and 17 bytes on our test
 device). Only the 2-byte company ID + both payloads concatenated (shortest
 first) yields the byte sequence expected by the original parser -
-`combine_manufacturer_payloads()` reproduces that. A single scan callback
-usually only sees one of the two packets; `scan_devices()` in discovery.py
-therefore collects over the entire scan window.
+`combine_manufacturer_payloads()` reproduces that. `scan_devices()` in
+discovery.py therefore collects over the entire scan window.
+
+An *idle* drive, however, was observed emitting ONLY the long (17-byte) packet -
+byte-identical, for minutes on end (a 5-minute idle capture never once saw the
+short packet); the short "status" packet shows up mainly around activity. So
+"scan longer" does not help at rest. The long packet alone still carries the
+serial number and - for product_class 2 - the opening position and maintenance
+flag, so `from_scan()` does a partial parse of it (see `_parse_long_packet_only`
+and LONG_PACKET_MIN_LEN); the status flags stay None until the short packet is
+seen.
 """
 
 from __future__ import annotations
@@ -41,6 +49,17 @@ PRODUCT_TYPE_NAMES = {
     (3, 17): "ST560 Dockleveller",
     (3, 33): "ST545",
 }
+
+
+# The BlueSecur advertisement is split across a short and a long manufacturer
+# packet (see the module docstring). On every device verified so far (Supramatic
+# S4, product_class 2) the long packet is 17 bytes: it carries product_data[4:]
+# plus the 8-byte serial number, while the short (6-byte) packet carries
+# product_id/class, the status byte and product_data[0:4]. An *idle* drive was
+# observed emitting ONLY the long packet for minutes at a time (the short packet
+# appears mainly around activity), so this is the minimum length at which a lone
+# packet can still yield the serial and - for product_class 2 - the position.
+LONG_PACKET_MIN_LEN = 17
 
 
 def _bit(b: int, position: int) -> bool:
@@ -93,28 +112,59 @@ class AdvertisementInfo:
     parse_error: str | None = None
 
     @classmethod
-    def from_scan(cls, address: str, rssi: int, payloads: list[bytes]) -> AdvertisementInfo:
+    def from_scan(
+        cls, address: str, rssi: int, payloads: list[bytes], product_class: int | None = None
+    ) -> AdvertisementInfo:
+        """Parse whatever was captured. With both advertisement packets a full
+        parse runs (product info + status flags + position + serial). With only
+        one packet - the common case for an *idle* drive, which keeps sending just
+        its long packet (see module docstring / LONG_PACKET_MIN_LEN) - a partial
+        parse recovers the serial and, when `product_class` is supplied (the long
+        packet doesn't carry it; pass it from the device registry), the opening
+        position; the status flags stay None until the short packet is seen."""
         info = cls(address=address, rssi=rssi, raw_manufacturer_data=[p.hex() for p in payloads])
         if not payloads:
             return info
         distinct = list({p for p in payloads})
-        if len(distinct) < 2:
-            # Empirically (see module docstring) the device sends status/product
-            # info in two alternating packets - with only one of them the length
-            # and "enough bytes present" checks would pass, but the result would
-            # be computed from the wrong bytes (e.g. all flags falsely False).
-            # Better to honestly parse nothing than to fake a wrong result.
-            info.parse_error = (
-                f"only {len(distinct)} distinct manufacturer-data packet(s) "
-                "seen, need at least 2 for full parsing - "
-                "scan longer (increase --timeout)"
-            )
-            return info
         try:
-            info._parse(combine_manufacturer_payloads(distinct))
+            if len(distinct) >= 2:
+                info._parse(combine_manufacturer_payloads(distinct))
+            else:
+                info._parse_long_packet_only(distinct[0], product_class)
         except Exception as exc:  # advertisement parsing must never crash a scan
             info.parse_error = f"{type(exc).__name__}: {exc}"
         return info
+
+    def _parse_long_packet_only(self, packet: bytes, product_class: int | None) -> None:
+        """Best-effort parse from a single (long) advertisement packet. Refusing
+        outright would leave a resting drive unreadable, since an idle drive sends
+        only this packet. The long packet's trailing 8 bytes are the serial number
+        (cross-checked live against the QR/registry serial), and for product_class
+        2 (Supramatic family) product_data[5]=packet[1] is the position byte and
+        product_data[6]=packet[2] the maintenance byte - these live in the long
+        packet, whereas the status flags (in_action, low_battery, relais, ...) sit
+        in the short packet and stay None until it is seen. product_class cannot be
+        read from the long packet alone, so the caller supplies it."""
+        if len(packet) < LONG_PACKET_MIN_LEN:
+            self.parse_error = (
+                f"only 1 manufacturer-data packet seen ({len(packet)} bytes), too short to be the "
+                "long packet that carries the serial/position - the drive splits its advertisement "
+                "across two packets, and the second appears mainly around activity"
+            )
+            return
+
+        # Serial is the last 8 bytes of the combined frame, i.e. of the long packet
+        # (see _parse: data[17:25] with a 25-byte combined frame).
+        self.serial_no = struct.unpack_from("<Q", packet, len(packet) - 8)[0]
+        if product_class == 2:
+            self.opening_progress_percent = packet[1] / 2.0
+            self.maintenance_required = _bit(packet[2], 1)
+        parsed = "serial and position" if product_class == 2 else "serial"
+        self.parse_error = (
+            f"only the long advertisement packet seen - an idle drive sends just this one; "
+            f"{parsed} parsed, but the status flags need the second (status) packet, which "
+            "appears mainly around activity"
+        )
 
     def _parse(self, data: bytes) -> None:
         # BLEAdvertisementData.ParseData

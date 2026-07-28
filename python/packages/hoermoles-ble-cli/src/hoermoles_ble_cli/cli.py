@@ -96,7 +96,7 @@ async def cmd_scan(args) -> None:
     known = known_qr_serial_map(config_dir=args.config_dir)
 
     log(f"Scanning for {args.timeout:.0f}s for Hoermann BlueSecur drives...")
-    devices = await scan_devices(timeout=args.timeout, adapter=args.adapter)
+    devices = await scan_devices(timeout=args.timeout, adapter=args.adapter, config_dir=args.config_dir)
     if not devices:
         print("No devices found.")
         return
@@ -125,9 +125,12 @@ async def cmd_scan(args) -> None:
             if info.relais1_open is not None:
                 print(f"  Relay 1 open:           {info.relais1_open}")
                 print(f"  Relay 2 open:           {info.relais2_open}")
-            if info.opening_progress_percent is not None:
-                print(f"  Opening progress:       {info.opening_progress_percent:.0f}%")
-                print(f"  Maintenance due:        {info.maintenance_required}")
+        # Position/maintenance come from the long packet, independently of the
+        # short packet's status flags - so print them even on a partial parse
+        # (idle drive, long packet only; see AdvertisementInfo.from_scan).
+        if info.opening_progress_percent is not None:
+            print(f"  Opening progress:       {info.opening_progress_percent:.0f}%")
+            print(f"  Maintenance due:        {info.maintenance_required}")
         if info.parse_error:
             print(f"  (incompletely parsed: {info.parse_error})")
         print(f"  Raw data (Manufacturer Data 1972): {info.raw_manufacturer_data}")
