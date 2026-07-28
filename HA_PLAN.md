@@ -7,7 +7,7 @@ Status: **draft for review - nothing implemented yet.** The package
 > **No hardware spike has been run for Home Assistant.** The core protocol has
 > been verified live against a real Supramatic E4 over a local bleak/BlueZ
 > connection, but nothing has yet driven the door through HA's own Bluetooth
-> stack - and that stack is exactly where the one real risk lives (section 9,
+> stack - and that stack is exactly where the one real risk lives (section 12,
 > risk 1). Do the connection spike before trusting any of the control path.
 
 Goal: a Home Assistant custom component that (a) surfaces a Hoermann BlueSecur
@@ -35,9 +35,14 @@ These mirror the shape of the SPA plan's fixed decisions, but here they are
   `HMOLES1[E]:` bundle format (`bundle.py`) - the user registers once with the
   CLI or SPA, then pastes/imports the bundle into HA. In-HA registration (drive
   in teach mode, paste QR) is offered as an advanced path, not the default.
+- **Two control backends behind one integration**, not two integrations: a
+  software-only path (GATT over HA's stack, local adapter or transparent proxy)
+  and an ESPHome-offload path (a smart ESP32 component that meets the write-timing
+  window locally). The integration detects the ESP component, offers it, and -
+  with the user's consent - shares the key to it. See section 7.
 - **Distribution via HACS as a custom repository**, pulling `hoermoles-ble` from
   PyPI via the manifest `requirements`. Not (yet) aiming for the HA core/default
-  HACS store. See section 8 - the monorepo layout needs one decision from you.
+  HACS store. See section 9 for the distribution decision.
 - **iot_class: `local_push`.** State is pushed by advertisements; commands are
   local and unauthenticated-to-the-cloud. No polling in the default path.
 
@@ -51,7 +56,7 @@ These drive the design the way the Web Bluetooth constraints drove the SPA.
 | Two alternating manufacturer packets (6 + 17 bytes) | HA delivers each `BluetoothServiceInfoBleak` as it arrives | Same quirk as the CLI (`advertisement.py` docstring): we must **accumulate** payloads across callbacks, not parse a single one, or every flag comes back falsely `False` |
 | Connectable device lookup | `async_ble_device_from_address(hass, addr, connectable=True)` | Needed for control. Returns `None` when only a non-connectable proxy has seen the drive - handle that as "sensors work, control unavailable" |
 | Connection establishment | `bleak-retry-connector.establish_connection()` | Replaces our `BleakClient(address)`. Adds retry/backoff and slot management HA needs. **The core lib's `BleakTransport` must accept an injected client** (section 4) |
-| ESPHome Bluetooth proxy | connect + write proxied over the network | The timing risk (section 9) is **worse** here: the ~100-150 ms write window may be unmeetable over a proxy round-trip. Local adapter strongly preferred |
+| ESPHome Bluetooth proxy | connect + write proxied over the network | The timing risk (section 12, risk 1) is **worse** here: the ~100-150 ms write window may be unmeetable over a *transparent* proxy round-trip. Local adapter preferred - or offload the timing to a smart ESPHome component (section 7) |
 | Config-entry storage | `.storage/core.config_entries`, plaintext JSON on disk | The root key is stored like every other HA secret: filesystem-permission protected, **not** encrypted at rest. Say so plainly in the README |
 | Discovery | manifest `bluetooth:` matcher (service uuid `669a9001-…` and/or manufacturer id `1972`) | Drives appear as auto-discovered without the user typing a MAC |
 
@@ -157,14 +162,76 @@ then ~30 lines: `establish_connection` in `connect()`, `write_gatt_char(BC_TX,
   accumulated payloads and pushes to entities via the standard
   `PassiveBluetoothDataUpdate`/coordinator dispatch.
 - Control is **not** on the coordinator. A small `HoermannConnection` helper owns
-  the per-entry lock and does connect→command→disconnect through the injected
-  transport. Cover/button entities call it directly; failures raise
-  `HomeAssistantError` with an actionable message (e.g. "no connectable path -
-  drive only seen via a non-connectable proxy").
+  the per-entry lock and does connect→command→disconnect through the selected
+  control backend (section 7: HA-bluetooth GATT, or the ESPHome offload service).
+  Cover/button entities call it directly; failures raise `HomeAssistantError`
+  with an actionable message (e.g. "no connectable path - drive only seen via a
+  non-connectable proxy").
 - No reconnect loop, no keepalive: the drive doesn't allow it, and holding a slot
   would starve HA's Bluetooth connection pool.
 
-## 7. Secrets
+## 7. Control-plane transport backends: SW-only proxy vs. ESPHome offload
+
+The passive plane is transport-agnostic. The *control* plane has **two backends
+behind the same `BleTransport` seam** (transport.py), and **one** integration
+picks between them - not two separate integrations:
+
+1. **`HABluetoothBackend`** (software-only, always available): GATT through HA's
+   shared stack via `establish_connection`, over a **local adapter** or a
+   **transparent `bluetooth_proxy`**. The baseline. Over a transparent proxy the
+   ~100-150 ms window is tight (section 12, risk 1): the three chunk writes each
+   cross WiFi, and the challenge→sign→write loop crosses it too. Local adapter is
+   safe; proxy is a spike outcome.
+2. **`EsphomeOffloadBackend`** (timing-safe at range): a custom **ESPHome external
+   component** on the ESP32 runs the timing-critical inner loop locally -
+   subscribe, capture the Signed challenge, HMAC-SHA256-sign the frame (mbedTLS,
+   already in ESP-IDF), and burst the three chunks back-to-back with **no network
+   between chunks**. HA talks to it as a normal ESPHome device over the native
+   API, not as a BLE proxy. This is effectively the C++ port of `protocol.py` + a
+   NimBLE transport - exactly the microcontroller port transport.py was shaped
+   for - and it should be cross-checked against the Python reference with shared
+   test vectors, the same discipline the TS/SPA port already uses.
+
+### How HA detects and drives the ESP component
+
+- **Contract:** the component exposes ESPHome *user-defined services* by a fixed
+  naming convention, e.g. `hoermoles_set_credentials(root_id, root_key_hex)` and
+  `hoermoles_impulse(channel)`, and reports result/status back via an event or a
+  sensor. This small HA↔ESP service contract is its own versioned mini-protocol.
+- **Detection:** the integration enumerates registered `esphome.<node>_…`
+  services for that pattern; a match that can reach the drive means offload is
+  available for that drive.
+- **Key sharing (RAM-only):** you still register **once in HA** (bundle import);
+  at setup HA pushes the credentials to the ESP's **RAM** via `set_credentials`
+  (never into ESPHome YAML/flash), re-pushing after an ESP reboot. The house key
+  is therefore only transient on the ESP and the ESPHome config stays
+  secret-free. The stricter "key never leaves HA, the ESP forwards the challenge
+  and HA signs the frame" variant is **deferred**: it needs a synchronous
+  device→HA→device callback *mid-BLE-transaction*, which ESPHome's
+  fire-and-forget service model handles badly - revisit only if RAM-on-ESP is
+  unacceptable, and only once the spike confirms the challenge survives a
+  round-trip.
+- **Consent, not silent routing:** because the offload moves the door key out of
+  HA onto the ESP, the integration **detects → offers → asks the user to
+  confirm**, rather than routing silently. That is both more honest and *less*
+  code than transparent capability-sniffing with a hidden fallback.
+
+### Scope boundaries
+
+- **Registration stays off the ESP.** The one-time RSA phase (bigger frame, rare)
+  is done with a local adapter / phone; the component only handles the everyday
+  signed impulse (and optionally the read commands).
+- **One passive source.** The ESP32 *could* parse advertisements locally and
+  expose its own sensors, but the integration keeps HA-bluetooth as the single
+  passive source so a drive never appears twice; the component is control-only
+  from HA's point of view - while remaining independently usable on its own for
+  anyone who wants no Python integration at all.
+- **Both, not either/or.** Entities and config flow are identical across
+  backends; only backend selection + the detect/consent step differ. The
+  software-only backend ships first, the offload lands behind the same seam
+  later (build order, section 11).
+
+## 8. Secrets
 
 - Root key lives in the config entry's `data`, i.e. `.storage` plaintext -
   standard for HA integrations, but state it in the README rather than imply
@@ -176,7 +243,7 @@ then ~30 lines: `establish_connection` in `connect()`, `write_gatt_char(BC_TX,
   outbound network calls - worth asserting and testing (no `requirements` that
   phone home; `iot_class: local_push`).
 
-## 8. Packaging, HACS & distribution — decided: its own repository
+## 9. Packaging, HACS & distribution — decided: its own repository
 
 **Decision:** the integration lives in a **dedicated repository**
 (`the78mole/hoermoles-ble-homeassistant`, domain `hoermoles_ble`), depending on
@@ -208,7 +275,7 @@ In the dedicated repo: `manifest.json` `requirements:
 changes; `hacs.json` (`name`, `homeassistant` floor) at repo root; `brand/` icon
 plus a `home-assistant/brands` PR; releases via `paulhatch/semantic-version`.
 
-## 9. CI
+## 10. CI
 
 - **`ha-test.yml`**: `pytest-homeassistant-custom-component`, plus HA's own
   `home-assistant/actions/hassfest` (manifest/strings validation) and the
@@ -225,26 +292,31 @@ plus a `home-assistant/brands` PR; releases via `paulhatch/semantic-version`.
   '.github/workflows/ha-*.yml']`.
 - Pre-commit: the component's Python goes through the same ruff hooks.
 
-## 10. Build order
+## 11. Build order
 
 | # | Step | Outcome |
 | --- | --- | --- |
-| **Spike 1** | On a real HA install with a **local** adapter: `establish_connection` to the drive, push a 49-byte channel frame in three chunks, confirm the impulse fires inside the ~100-150 ms window | Settles whether HA's Bluetooth stack can meet the timing at all. **Do this before building the control plane.** Repeat over an ESPHome proxy to learn if proxies are viable or must be documented as sensors-only |
+| **Spike 1** | On a real HA install with a **local** adapter: `establish_connection` to the drive, push a 49-byte channel frame in three chunks, confirm the impulse fires inside the ~100-150 ms window | Settles whether HA's Bluetooth stack can meet the timing at all. **Do this before building the control plane.** Repeat over a *transparent* ESPHome proxy to learn if proxies are viable or need the offload (section 7) |
 | 1 | `BleakTransport` accepts an injected client (+ tests) | Core seam ready; no behaviour change for existing callers |
 | 2 | Passive plane: coordinator + advertisement accumulation + sensors/binary_sensors/cover-position, **no control yet** | A drive shows live position/motion/battery in HA with zero credentials. Independently valuable and fully testable offline |
 | 3 | Config flow: discovery + bundle import + "sensors only" | Onboarding works end-to-end for the passive plane |
 | 4 | Control plane: connection helper + cover open/close/stop (impulse) + verified channel 1 | The actual door control, gated behind Spike 1 |
-| 5 | HACS packaging (section 8 decision), hassfest/HACS CI, README with the honest security + proxy caveats | Installable |
+| 5 | HACS packaging (section 9 decision), hassfest/HACS CI, README with the honest security + proxy caveats | Installable |
 | 6 | Advanced: in-HA registration, unverified channels behind options, opt-in service-data poll, log `event`s | Feature-complete; each piece clearly marked verified/unverified |
+| **Spike 2** | Prototype the ESPHome external component: connect, capture challenge, HMAC-sign and burst the three chunks **on-device**; confirm the impulse fires reliably at proxy range | Settles whether the offload actually removes the timing risk before investing in the full component. Gates step 7 |
+| 7 | `EsphomeOffloadBackend` behind the same seam: the ESPHome component (C++ port + shared test vectors), the `hoermoles_set_credentials`/`hoermoles_impulse` service contract, and the integration's detect→offer→consent + RAM key-push | Timing-safe control at range; entities/config flow unchanged from the software-only path |
 
-## 11. Risks
+## 12. Risks
 
 1. **The write-timing window - the same one that can sink the SPA, and worse over
    a proxy.** The drive disconnects ~100-150 ms after the first chunk regardless
-   of chunk count. HA serialises GATT through `habluetooth`, and an ESPHome proxy
-   adds a network round-trip per operation. If a 49-byte / three-write frame
-   can't land in time, the control plane is dead over that transport. Local
-   adapter is the baseline; proxy support is a spike outcome, not an assumption.
+   of chunk count. HA serialises GATT through `habluetooth`, and a *transparent*
+   ESPHome proxy adds a network round-trip per operation. If a 49-byte /
+   three-write frame can't land in time, the software-only control plane is dead
+   over that transport. Local adapter is the baseline; transparent-proxy support
+   is a spike outcome, not an assumption. **Mitigation for range:** the
+   `EsphomeOffloadBackend` (section 7) moves the chunk burst onto the ESP32, where
+   there is no network between chunks - the structural fix, gated on Spike 2.
 2. **No connectable path.** A drive seen only by a non-connectable proxy gives
    sensors but no control. Handled as a first-class state, not an error.
 3. **Unverified protocol paths.** `write_properties`, channels 2-6, and discrete
