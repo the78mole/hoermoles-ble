@@ -25,7 +25,9 @@ Independent control of Hoermann garage door drives that use the BlueSecur BLE
 - `python/` - uv workspace with the Python packages:
   - `hoermoles-ble` - protocol/crypto core + BLE client (`packages/hoermoles-ble`)
   - `hoermoles-ble-cli` - test tool/CLI (`packages/hoermoles-ble-cli`)
-  - `hoermoles-ble-homeassistant` - Home Assistant integration (placeholder, not implemented yet)
+  - The Home Assistant integration lives in its own repository
+    (`hoermoles-ble-homeassistant`), depending on `hoermoles-ble` from PyPI - see
+    [HA_PLAN.md](HA_PLAN.md)
 - `spa/` - npm workspace for the web app:
   - `hoermoles-ble-js` - TypeScript port of the protocol + a Web Bluetooth transport
   - `webapp` - the installable PWA itself
