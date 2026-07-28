@@ -13,7 +13,11 @@ See the [project root README](../README.md) for the overall repo layout.
 |---|---|
 | [`hoermoles-ble`](packages/hoermoles-ble) | Protocol/crypto core + BLE client. `protocol.py` has no third-party dependencies and serves as a template for ports to other languages. |
 | [`hoermoles-ble-cli`](packages/hoermoles-ble-cli) | CLI tool (`hoermoles-ble` command) built on top of the library. |
-| [`hoermoles-ble-homeassistant`](packages/hoermoles-ble-homeassistant) | Home Assistant custom component - placeholder, not implemented yet. |
+
+The Home Assistant integration is **not** part of this workspace: it lives in its
+own repository (`hoermoles-ble-homeassistant`) and depends on `hoermoles-ble` from
+PyPI, so it ships and versions independently via HACS - see
+[`../HA_PLAN.md`](../HA_PLAN.md).
 
 ## Requirements
 

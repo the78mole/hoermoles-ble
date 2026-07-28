@@ -6,7 +6,6 @@ requires-python = ">=3.10"
 members = [
     "hoermoles-ble",
     "hoermoles-ble-cli",
-    "hoermoles-ble-homeassistant",
 ]
 
 [manifest.dependency-groups]
@@ -433,17 +432,6 @@ requires-dist = [
     { name = "hoermoles-ble", extras = ["bleak"], editable = "packages/hoermoles-ble" },
     { name = "segno", specifier = ">=1.6" },
 ]
-
-[[package]]
-name = "hoermoles-ble-homeassistant"
-version = "0.1.0"
-source = { editable = "packages/hoermoles-ble-homeassistant" }
-dependencies = [
-    { name = "hoermoles-ble", extra = ["bleak"] },
-]
-
-[package.metadata]
-requires-dist = [{ name = "hoermoles-ble", extras = ["bleak"], editable = "packages/hoermoles-ble" }]
 
 [[package]]
 name = "iniconfig"
