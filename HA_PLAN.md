@@ -182,8 +182,7 @@ then ~30 lines: `establish_connection` in `connect()`, `write_gatt_char(BC_TX,
 (`the78mole/hoermoles-ble-homeassistant`, domain `hoermoles_ble`), depending on
 the `hoermoles-ble` core library from **PyPI**. Not inside this monorepo.
 
-Why, in short (full findings in the plan file
-`~/.claude/plans/ist-es-m-glich-die-hazy-gizmo.md`):
+Why, in short:
 
 - HACS only reads `ROOT/custom_components/<domain>/` and downloads those files via
   the GitHub contents API - a **nested** path under `python/packages/…` is
