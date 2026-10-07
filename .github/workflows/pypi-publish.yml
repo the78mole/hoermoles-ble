@@ -201,7 +201,7 @@ jobs:
         EOF
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v7.0.1
+      uses: actions/upload-artifact@v7.0.2
       with:
         name: hoermoles-ble-dist
         path: python/packages/hoermoles-ble/dist/
@@ -301,7 +301,7 @@ jobs:
         EOF
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v7.0.1
+      uses: actions/upload-artifact@v7.0.2
       with:
         name: hoermoles-ble-cli-dist
         path: python/packages/hoermoles-ble-cli/dist/
