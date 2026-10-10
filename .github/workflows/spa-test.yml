@@ -26,7 +26,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7.0.1
 
-    - uses: actions/setup-node@v7.0.0
+    - uses: actions/setup-node@v7.1.0
       with:
         # 24, not 22, and the two workflows must stay in step: package-lock.json
         # is written by npm 11 (bundled with Node 24), which correctly omits

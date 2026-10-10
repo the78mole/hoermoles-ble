@@ -82,7 +82,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7.0.1
 
-    - uses: actions/setup-node@v7.0.0
+    - uses: actions/setup-node@v7.1.0
       with:
         # Keep in step with spa-test.yml - see the comment there on why 22 breaks
         # `npm ci` against a lockfile written by npm 11.
