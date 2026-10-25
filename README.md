@@ -32,7 +32,7 @@ Independent control of Hoermann garage door drives that use the BlueSecur BLE
   - `hoermoles-ble-js` - TypeScript port of the protocol + a Web Bluetooth transport
   - `webapp` - the installable PWA itself
 - `shared/` - **generated** language-neutral artifacts consumed by both sides
-  (`test-vectors.json`, `menu-tables.json`) plus the app artwork. Do not edit by
+  (`test-vectors.json`, `menu-tables.json`, `handoff-vectors.json`) plus the app artwork. Do not edit by
   hand; see [Shared artifacts](#shared-artifacts).
 - `pages/` - the published site's root. The deploy copies this to the top level
   and grafts the built app in at `app/`, so further content (documentation) can
@@ -121,6 +121,12 @@ cd python && uv run python scripts/generate_shared.py
 
 `test_interop.py` fails if the committed files no longer match the code, so a
 forgotten regeneration is a red build rather than a silently stale port.
+
+`shared/handoff-vectors.json` is the exception: it pins the key handoff to Home
+Assistant (`spa/packages/hoermoles-ble-js/src/handoff.ts`), whose reference
+implementation lives in the integration's repository. It is generated there with
+`scripts/generate_handoff_vector.py`, and guarded by that repository's tests.
+Copy it over when it changes.
 
 ## Development
 

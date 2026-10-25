@@ -2,13 +2,17 @@
   import { PREFIX_ENCRYPTED, type StoredCredential } from 'hoermoles-ble-js';
 
   import { displayName, exportBundleJson, exportBundleText, isExportable } from '../lib/drives.svelte';
+  import QrCapture from './QrCapture.svelte';
   import QrDisplay from './QrDisplay.svelte';
 
   interface Props {
     drives: StoredCredential[];
+    /** Hands a scanned Home Assistant QR code to the handoff panel. */
+    onscan?: (text: string) => boolean;
   }
 
-  const { drives }: Props = $props();
+  const { drives, onscan }: Props = $props();
+  let scanError = $state<string | null>(null);
 
   let passphrase = $state('');
   let confirmation = $state('');
@@ -212,3 +216,22 @@
     {/if}
   {/if}
 </div>
+
+{#if onscan && exportable.length > 0}
+  <div class="card">
+    <h2>Send to Home Assistant</h2>
+    <p class="muted">
+      Add the <em>Hoermoles BLE</em> integration in Home Assistant and choose the QR code option. Scan the
+      code with your phone's camera, or from here. The key is encrypted for that one setup dialog only.
+    </p>
+    <QrCapture
+      label="Scan Home Assistant's QR code"
+      onresult={(scanned) => {
+        scanError = onscan(scanned) ? null : 'That is not a Home Assistant setup QR code.';
+      }}
+    />
+    {#if scanError}
+      <div class="notice danger">{scanError}</div>
+    {/if}
+  </div>
+{/if}
