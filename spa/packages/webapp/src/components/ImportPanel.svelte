@@ -9,9 +9,12 @@
     oncomplete?: () => void;
     /** Bundle text taken from an `#import=` link, filled in on first render. */
     prefill?: string;
+    /** Gets every scanned code first; returns true when it took it (a Home
+     * Assistant handoff QR code), so it does not land in the bundle field. */
+    onscan?: (text: string) => boolean;
   }
 
-  const { oncomplete, prefill = '' }: Props = $props();
+  const { oncomplete, prefill = '', onscan }: Props = $props();
 
   // Seed once and then let the field be the source of truth - `prefill` comes
   // from a URL fragment read at startup and never changes afterwards, so
@@ -32,6 +35,11 @@
   }
 
   async function submit() {
+    // A pasted Home Assistant link is a request, not a bundle.
+    if (onscan?.(text)) {
+      text = '';
+      return;
+    }
     busy = true;
     result = null;
     try {
@@ -64,7 +72,12 @@
     protects it with a passphrase, <code>--out</code> writes a JSON file instead.
   </p>
 
-  <QrCapture label="Scan the export QR code" onresult={(scanned) => (text = scanned)} />
+  <QrCapture
+    label="Scan the export QR code"
+    onresult={(scanned) => {
+      if (!onscan?.(scanned)) text = scanned;
+    }}
+  />
 
   <label for="import-file">Or load a JSON file</label>
   <input id="import-file" type="file" accept="application/json,.json,.txt" onchange={readFile} />
