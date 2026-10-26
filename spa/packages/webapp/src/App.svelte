@@ -71,6 +71,13 @@
     // it silently for installed PWAs and usually refuses for a plain tab.
     persistent = await requestPersistentStorage();
 
+    handleFragment();
+  });
+
+  /** Picks up an `#import=` or `#ha=` link - at startup, and again when the
+   * fragment changes in an already open tab (a link pasted into the address
+   * bar there only fires `hashchange`, it does not reload the app). */
+  function handleFragment() {
     // An import link opens the app with the bundle in the URL fragment, which
     // never reaches the server. Hand it to the import form and strip it from
     // the address bar straight away, so a plaintext bundle does not sit there
@@ -92,8 +99,10 @@
       history.replaceState(null, '', window.location.pathname + window.location.search);
       tab = 'drives';
     }
-  });
+  }
 </script>
+
+<svelte:window onhashchange={handleFragment} />
 
 <header>
   <h1>Hoermoles</h1>
@@ -156,7 +165,10 @@
     {/if}
   {/if}
 {:else if tab === 'add'}
-  <ImportPanel prefill={importPrefill} onscan={openHandoff} oncomplete={() => (tab = 'drives')} />
+  <!-- Keyed so a second import link re-seeds the form, which reads its prefill only once. -->
+  {#key importPrefill}
+    <ImportPanel prefill={importPrefill} onscan={openHandoff} oncomplete={() => (tab = 'drives')} />
+  {/key}
   <RegisterPanel {bluetoothAvailable} oncomplete={() => (tab = 'drives')} />
 {:else if tab === 'export'}
   <ExportPanel drives={drives.items} onscan={openHandoff} />

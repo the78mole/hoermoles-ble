@@ -120,7 +120,8 @@ a {
   margin-bottom: 1rem;
 }
 
-button {
+button,
+a.button {
   font: inherit;
   font-weight: 600;
   color: var(--text);
@@ -133,7 +134,15 @@ button {
   cursor: pointer;
 }
 
-button:hover:not(:disabled) {
+/* A link that does a button's job - e.g. a navigation that must not be pop-up blocked. */
+a.button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+button:hover:not(:disabled),
+a.button:hover {
   border-color: var(--accent);
 }
 
@@ -142,7 +151,8 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--accent);
   color: var(--accent-text);
   border-color: var(--accent);
