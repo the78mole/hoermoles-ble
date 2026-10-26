@@ -11,8 +11,8 @@
 
   const { request, onclose }: Props = $props();
 
-  let busy = $state(false);
-  let sentUrl = $state<string | null>(null);
+  let deliveryUrl = $state<string | null>(null);
+  let sent = $state(false);
   let error = $state<string | null>(null);
 
   // HA rejects a bundle without this drive, so there is nothing to choose: it
@@ -21,26 +21,39 @@
     drives.items.find((record) => record.deviceAddress.toUpperCase() === request.address) ?? null,
   );
 
-  async function send() {
-    if (!drive) return;
-    busy = true;
+  // Encrypt up front, so that sending is a plain link the user taps. A tapped
+  // link is never pop-up blocked, whereas window.open() after an await is (iOS
+  // Safari drops the user activation). Nothing leaves the phone before the tap,
+  // and the envelope only opens inside this one HA config flow.
+  $effect(() => {
+    const target = drive && isExportable(drive) ? drive : null;
+    deliveryUrl = null;
     error = null;
-    try {
-      // Plaintext bundle on purpose: the envelope already encrypts it to a key
-      // that only this one HA config flow holds, and a passphrase would just be
-      // one more thing to type into HA.
-      const envelope = await encryptHandoff(request, await exportBundleText([drive]));
-      sentUrl = handoffDeliveryUrl(request, envelope);
-      // A top-level navigation, not a fetch: the CSP's connect-src 'none' stays
-      // intact. A new tab keeps this app where it is.
-      window.open(sentUrl, '_blank', 'noopener,noreferrer');
-      addLog(`Key for ${request.address} handed to Home Assistant at ${request.host}.`);
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-      addLog(`Handoff to Home Assistant failed: ${error}`, 'error');
-    } finally {
-      busy = false;
-    }
+    if (!target) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Plaintext bundle on purpose: the envelope already encrypts it to a
+        // key that only this one HA config flow holds, and a passphrase would
+        // just be one more thing to type into HA.
+        const envelope = await encryptHandoff(request, await exportBundleText([target]));
+        if (!cancelled) deliveryUrl = handoffDeliveryUrl(request, envelope);
+      } catch (caught) {
+        if (cancelled) return;
+        error = caught instanceof Error ? caught.message : String(caught);
+        addLog(`Handoff to Home Assistant failed: ${error}`, 'error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // A top-level navigation, not a fetch: the CSP's connect-src 'none' stays
+  // intact. target="_blank" keeps this app where it is.
+  function delivered() {
+    sent = true;
+    addLog(`Key for ${request.address} handed to Home Assistant at ${request.host}.`);
   }
 </script>
 
@@ -79,23 +92,30 @@
       read its key back - that is working as intended. Export it from the device or CLI that registered it,
       or re-import your backup here with re-export allowed.
     </div>
-  {:else if sentUrl}
+  {:else if sent}
     <div class="notice success">
       A new tab with Home Assistant opened and should confirm that the key was received. Go back to the
       Home Assistant setup dialog and press <strong>Submit</strong>.
     </div>
-    <p class="muted">
-      No tab opened? <a href={sentUrl} target="_blank" rel="noopener noreferrer">Open it here</a>.
-    </p>
   {:else}
     <p>
       Send the key of <strong>{displayName(drive)}</strong>? Home Assistant can then open this garage
       door whenever it wants.
     </p>
     <div class="row">
-      <button class="primary" disabled={busy} onclick={send}>
-        {busy ? 'Encrypting…' : 'Send key to Home Assistant'}
-      </button>
+      {#if deliveryUrl}
+        <a
+          class="button primary"
+          href={deliveryUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onclick={delivered}
+        >
+          Send key to Home Assistant
+        </a>
+      {:else if !error}
+        <button class="primary" disabled>Encrypting…</button>
+      {/if}
     </div>
   {/if}
 
@@ -104,6 +124,6 @@
   {/if}
 
   <div class="row" style="margin-top: 0.75rem">
-    <button onclick={onclose}>{sentUrl ? 'Done' : 'Cancel'}</button>
+    <button onclick={onclose}>{sent ? 'Done' : 'Cancel'}</button>
   </div>
 </div>
