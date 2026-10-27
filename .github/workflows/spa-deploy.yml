@@ -140,7 +140,7 @@ jobs:
     steps:
     - name: Deploy
       id: deployment
-      uses: actions/deploy-pages@v5.0.0
+      uses: actions/deploy-pages@v5.0.1
 
     - name: Summary
       run: |
