@@ -54,6 +54,7 @@ from .protocol import (
     BC_TX,
     CHANNEL_COMMAND_ID,
     GATE_ACTIONS,
+    channels_for_product,
     product_class_and_id_from_qr_prefix,
     serial_no_from_qr_prefix,
 )
@@ -89,6 +90,7 @@ __all__ = [
     "RegistrationTimeout",
     "bundle_from_json",
     "bundle_to_json",
+    "channels_for_product",
     "decode_bundle",
     "default_credentials_path",
     "default_devices_registry_path",
