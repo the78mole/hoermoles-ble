@@ -111,17 +111,19 @@ Passive (from advertisement - available even with no credential):
 
 Control (need a credential + a connectable path):
 
-- **button**: channels 2/3/6 (`light`/`partial`/`ventilation`) - unverified per
-  their docstrings, so diagnostic category, disabled by default, name carries the
-  "(unverified)" caveat.
+- **button**: channels 2/3/6 (`light`/`partial`/`ventilation`). Partial and
+  ventilation are verified live (see `GATE_ACTIONS` in `protocol.py`);
+  ventilation only where the drive has it (`channels_for_product` - not on the
+  plain Supramatic 4). Light is the app's channel 2 on every drive of the family
+  but not tried on hardware yet, so its name carries the "(unverified)" caveat.
 - **sensor** (opt-in, off by default): service-data counters (operating hours,
   door cycles, …) via `read_service_data`. This is a *connecting* poll, slow and
   rate-limited (default e.g. every 6 h), never in the hot path. Same treatment
   for a menu/parameter read if wanted later.
 - **event** for audit-log entries (`read_log`) - deferred past v1.
 
-Everything unverified against real hardware (`write_properties`, channels 2-6,
-open/close) must be visibly marked in the UI, exactly as the SPA plan insists -
+Everything unverified against real hardware (`write_properties`, channels 2/4/5
+- light and discrete open/close) must be visibly marked in the UI, exactly as the SPA plan insists -
 we do not present a reverse-engineered guess as if it were confirmed.
 
 ## 4. Library changes needed in `hoermoles-ble`
@@ -162,7 +164,7 @@ then ~30 lines: `establish_connection` in `connect()`, `write_gatt_char(BC_TX,
   4. *Skip - sensors only* - finish with no credential. Fully supported; the
      cover/buttons simply aren't created until a credential is added later via
      the options flow.
-- **Options flow**: enable unverified channels (open/close/2/3/6), enable +
+- **Options flow**: enable unverified channels (open/close, i.e. 4/5), enable +
   interval for service-data polling, connection timeout, and "add/replace
   credential" (so a sensors-only entry can be upgraded to control later).
 
@@ -330,8 +332,8 @@ plus a `home-assistant/brands` PR; releases via `paulhatch/semantic-version`.
    there is no network between chunks - the structural fix, gated on Spike 2.
 2. **No connectable path.** A drive seen only by a non-connectable proxy gives
    sensors but no control. Handled as a first-class state, not an error.
-3. **Unverified protocol paths.** `write_properties`, channels 2-6, and discrete
-   open/close are not confirmed against hardware. Same rule as the SPA: never
+3. **Unverified protocol paths.** `write_properties`, channel 2 (light) and
+   discrete open/close (4/5) are not confirmed against hardware (1, 3 and 6 are). Same rule as the SPA: never
    present them as verified - diagnostic category, disabled by default, labelled.
 4. **Secret at rest.** The root key sits in `.storage` plaintext. This is normal
    for HA but must be stated, not glossed. A host compromise is a door

@@ -89,13 +89,19 @@ READ_SERVICE_DATA_COMMAND_ID = 0x0042
 # product family (BlueApp.Core.Services.ChannelDefaultsService.TryGetDefaultsFor,
 # ChannelCategory per DeviceAction.CHANNEL_n - identical for every product in
 # that family except CHANNEL_6, which is absent on the plain SUPRAMATIC_4
-# variant). Verified live against a real Supramatic S4: CHANNEL_1 ("impulse",
-# the factory-default open/stop/close toggle), CHANNEL_3 ("partial") and
-# CHANNEL_6 ("ventilation") - the latter two confirmed by driving the door from
-# partial to ventilation (advertisement opening dropped to ~4%) and back to
-# partial (~12%), read straight from the advertisement. "light"/"open"/"close"
-# remain only structurally derived from the decompiled defaults table, not yet
-# confirmed against real hardware.
+# variant - see channels_for_product). Verified live against a real Supramatic
+# S4: CHANNEL_1 ("impulse", the factory-default open/stop/close toggle),
+# CHANNEL_3 ("partial") and CHANNEL_6 ("ventilation") - the latter two confirmed
+# by driving the door from partial to ventilation (advertisement opening dropped
+# to ~4%) and back to partial (~12%), read straight from the advertisement.
+# "light"/"open"/"close" remain only structurally derived from the decompiled
+# defaults table, not yet confirmed against real hardware.
+#
+# The mapping is fixed for these drives: the app sends the channel's DeviceAction
+# (CHANNEL_n) when it is pressed (ExecuteChannelAsyncCommand), and its channel
+# settings screen - where a channel's category can be changed - exists only for
+# the HET relay receiver (ApplianceSettingsHetsbtViewModel), which keeps that
+# category app-side (BackingStorageKind.Model in HETSBTDeviceSettings).
 GATE_ACTIONS = {
     "impulse": 1,  # ChannelCategory.Other - factory default, toggles open/stop/close (verified live)
     "light": 2,  # ChannelCategory.Light (unverified)
@@ -104,6 +110,24 @@ GATE_ACTIONS = {
     "close": 5,  # ChannelCategory.Close (Richtungswahl Tor-ZU) (unverified)
     "ventilation": 6,  # ChannelCategory.VentilationPosition - not on every model; verified live
 }
+
+
+def channels_for_product(product_class: int | None, product_id: int | None) -> tuple[int, ...]:
+    """The channel numbers a drive accepts, as the official app grants them
+    (SAL.BlueConnect.API.Devices.BaseBluetoothService.GrantedChannels): the HET
+    relay receiver (product class 1, and any class the app doesn't know)
+    channels 1-2; industrial drives (class 3) and the plain Supramatic 4
+    (product id 1) channels 1-5; every other drive 1-6. With the product unknown
+    (e.g. only the long advertisement packet seen so far) all six are returned -
+    callers that must not offer a missing channel should wait for the product."""
+    if product_class is None:
+        return tuple(range(1, 7))
+    if product_class not in (2, 3):
+        return (1, 2)
+    if product_class == 3 or product_id == 1:
+        return tuple(range(1, 6))
+    return tuple(range(1, 7))
+
 
 # DeviceAction.REGISTER_ROOT = 65537 = 0x10001, lower 16-bit word
 REGISTER_ROOT_COMMAND_ID = 0x0001

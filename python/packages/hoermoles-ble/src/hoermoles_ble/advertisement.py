@@ -34,7 +34,12 @@ from dataclasses import dataclass
 COMPANY_ID = 1972  # 0x07B4
 
 # SAL.BlueConnect.API.Devices.Info.DeviceData.DeviceService.ProductType, incomplete
-# (only the mappings visible in the decompiled BLEAdvertisementData.cs)
+# (only the mappings visible in the decompiled BLEAdvertisementData.cs). These
+# pick the advertisement layout to parse, so they are not always the model: the
+# app's product identity (SAL.BlueConnect.API.Devices.BaseBluetoothService.Product)
+# has class 3 / id 8 as ST 560 R and id 40 as ST 545 R, both parsed like an ST560
+# here, and class 2 / id 1 vs 2 as SUPRAMATIC_4 vs SUPRAMATIC_4_2 (only the
+# latter has a ventilation position, see protocol.channels_for_product).
 PRODUCT_TYPE_NAMES = {
     (1, None): "HET",
     (2, 1): "Supramatic Serie 4",

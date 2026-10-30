@@ -183,6 +183,27 @@ def test_channel_command_id_covers_1_through_6():
     assert p.CHANNEL_COMMAND_ID == {n: 0x10 + n for n in range(1, 7)}
 
 
+@pytest.mark.parametrize(
+    ("product_class", "product_id", "channels"),
+    [
+        (1, 1, (1, 2)),  # HET relay receiver
+        (1, 2, (1, 2)),
+        (7, 1, (1, 2)),  # a class the app doesn't know is treated as HET
+        (2, 1, (1, 2, 3, 4, 5)),  # plain Supramatic 4: no ventilation position
+        (2, 2, (1, 2, 3, 4, 5, 6)),  # Supramatic 4 (2)
+        (2, 17, (1, 2, 3, 4, 5, 6)),  # Rollmatic 2
+        (2, 33, (1, 2, 3, 4, 5, 6)),  # SilentDrive 2
+        (2, 49, (1, 2, 3, 4, 5, 6)),  # Supramatic 4 H4
+        (3, 1, (1, 2, 3, 4, 5)),  # industrial: ST 560
+        (3, 40, (1, 2, 3, 4, 5)),
+        (None, None, (1, 2, 3, 4, 5, 6)),  # unknown product
+    ],
+)
+def test_channels_for_product(product_class, product_id, channels):
+    assert p.channels_for_product(product_class, product_id) == channels
+    assert set(channels) <= set(p.CHANNEL_COMMAND_ID)
+
+
 def test_gate_actions_map_to_expected_channels():
     assert p.GATE_ACTIONS == {
         "impulse": 1,
