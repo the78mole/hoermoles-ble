@@ -111,6 +111,20 @@ async def test_register_raises_on_encrypted_ack_error(monkeypatch):
             await client.register(qr_text, "AA:BB:CC:DD:EE:FF", timeout=2.0)
 
 
+async def test_register_ack_timeout_for_a_silent_drive(monkeypatch):
+    """A drive outside teach mode never acks SET_REGISTER_KEY; ack_timeout ends the wait."""
+    qr_text, _private_key = _make_qr_text()
+    monkeypatch.setattr(client_module.secrets, "token_bytes", lambda n: bytes(32))
+
+    transport = FakeTransport()
+    async with HoermannClient(transport) as client:
+        await _enable(client, transport)
+        started = asyncio.get_running_loop().time()
+        with pytest.raises(RegistrationTimeout, match="SET_REGISTER_KEY"):
+            await client.register(qr_text, "AA:BB:CC:DD:EE:FF", ack_timeout=0.2)
+        assert asyncio.get_running_loop().time() - started < 2.0
+
+
 async def test_register_raises_on_root_key_timeout(monkeypatch):
     qr_text, _private_key = _make_qr_text()
     monkeypatch.setattr(client_module.secrets, "token_bytes", lambda n: bytes(32))

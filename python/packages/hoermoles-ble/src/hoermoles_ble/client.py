@@ -179,7 +179,9 @@ class HoermannClient:
             if inter_chunk_delay:
                 await asyncio.sleep(inter_chunk_delay)
 
-    async def register(self, qr_text: str, device_address: str, timeout: float = 15.0) -> Credentials:
+    async def register(
+        self, qr_text: str, device_address: str, timeout: float = 15.0, ack_timeout: float = 20.0
+    ) -> Credentials:
         """One-time QR code registration (phase 1).
         Assumes the drive is currently accepting a new registration
         (advertisement bit AdminsCanBeTeached=True, e.g. right after a reset
@@ -188,6 +190,11 @@ class HoermannClient:
         Sends two commands as a sequence (SAL.BlueConnect.API.Keys.KeyChain.RegisterRoot):
         first SET_REGISTER_KEY (RSA), then - only AFTER its acknowledgement -
         REGISTER_ROOT (HMAC-signed with the same register_key).
+
+        `ack_timeout` bounds the wait for the SET_REGISTER_KEY acknowledgement,
+        `timeout` the wait for ROOT_KEY after REGISTER_ROOT. A drive that is not
+        in teach mode doesn't answer the first step at all, so `ack_timeout` is
+        how long a caller waits before it can say so.
         """
         prefix, der = parse_qr_code(qr_text)
         device_pubkey = load_device_public_key(der)
@@ -198,7 +205,7 @@ class HoermannClient:
         await self._write_chunked(build_registration_frame(encrypted))
 
         try:
-            await self._wait_for_encrypted_complete(timeout=20.0)
+            await self._wait_for_encrypted_complete(timeout=ack_timeout)
         except asyncio.TimeoutError as exc:
             raise RegistrationTimeout(
                 "No acknowledgement received for SET_REGISTER_KEY - the drive is presumably "
