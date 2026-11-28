@@ -10,7 +10,7 @@ dev = [
     # .pre-commit-config.yaml. When they drifted apart, `uv run ruff check`
     # passed while the pre-commit hook reordered imports in files nobody had
     # touched - bump both together.
-    "ruff>=0.16,<0.17",
+    "ruff>=0.17,<0.18",
 ]
 
 [tool.pytest.ini_options]
